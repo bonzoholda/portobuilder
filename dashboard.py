@@ -3,9 +3,6 @@ import sqlite3
 import time
 import os
 
-port = int(os.getenv("PORT", 8080))
-app.run(host="0.0.0.0", port=port)
-
 
 app = Flask(__name__)
 DB = "trader.db"
