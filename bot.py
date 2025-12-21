@@ -1,4 +1,3 @@
-import os
 import time
 import random
 from datetime import datetime, timezone
@@ -8,14 +7,8 @@ load_dotenv()
 
 from pair_scanner import get_safe_pairs
 from strategy import htf_ok, entry_ok
-from risk import load_state, save_state, can_trade
-from uniswap_v3 import UniswapV3Client as UniswapClient
-from state import (
-    init_db,
-    record_trade,
-    set_meta
-)
-
+from uniswap_v3 import UniswapV3Client
+from state import init_db, record_trade, load_state, update_pnl, set_meta
 from ohlcv import load_ohlcv
 from token_list import TOKEN_BY_SYMBOL
 
@@ -29,49 +22,35 @@ LOOP_SLEEP = 300                 # 5 minutes
 # ================= INIT ===================
 
 init_db()
-client = UniswapClient()
+client = UniswapV3Client()
+
+last_trade_ts = {}  # in-memory cooldown tracking
 
 print("✅ Bot started")
 
 # ================= HELPERS =================
 
-def today_timestamp():
-    return int(datetime.now(timezone.utc).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    ).timestamp())
-
-
-def get_daily_pnl():
-    import sqlite3
-    conn = sqlite3.connect("trader.db")
-    c = conn.cursor()
-    c.execute(
-        "SELECT SUM(amount_out - amount_in) FROM trades WHERE timestamp >= ?",
-        (today_timestamp(),)
-    )
-    pnl = c.fetchone()[0] or 0
-    conn.close()
-    return pnl
-
+def utc_day():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 # ================= MAIN LOOP =================
 
 while True:
     try:
         state = load_state()
+        daily_pnl = state["daily_pnl"]
 
-        daily_pnl = get_daily_pnl()
-        set_meta("daily_pnl", daily_pnl)
+        set_meta(
+            network="polygon",
+            base="USDC",
+            date=utc_day(),
+            daily_pnl=daily_pnl
+        )
 
         # 🔴 KILL SWITCH
         if daily_pnl <= MAX_DAILY_LOSS:
             print(f"🛑 Kill switch triggered: {daily_pnl:.2f} USDC")
             time.sleep(86400)
-            continue
-
-        if not can_trade(state):
-            print("⚠️ Trading disabled by risk module")
-            time.sleep(600)
             continue
 
         pairs = get_safe_pairs()
@@ -86,8 +65,8 @@ while True:
             if symbol not in TOKEN_BY_SYMBOL:
                 continue
 
-            last_trade = state.get("last_trade", {}).get(symbol, 0)
-            if time.time() - last_trade < LAST_TRADE_COOLDOWN:
+            last_ts = last_trade_ts.get(symbol, 0)
+            if time.time() - last_ts < LAST_TRADE_COOLDOWN:
                 continue
 
             df_htf = load_ohlcv(symbol, "4h")
@@ -103,23 +82,20 @@ while True:
 
             print(f"🟢 BUY {symbol}")
 
-            tx = client.buy_with_usdc(
-                token_addr=token_addr,
-                usdc_amount=TRADE_USDC_AMOUNT
+            tx_hash = client.buy_with_usdc(
+                token_addr,
+                TRADE_USDC_AMOUNT
             )
 
             record_trade(
-                pair=f"{symbol}/USDC",
                 side="BUY",
-                amount_in=TRADE_USDC_AMOUNT,
-                amount_out=0,
-                price=0,
-                tx=tx
+                symbol=symbol,
+                amount=TRADE_USDC_AMOUNT,
+                tx_hash=tx_hash
             )
 
-            # Update cooldown state
-            state.setdefault("last_trade", {})[symbol] = int(time.time())
-            save_state(state)
+            # No realized PnL yet (BUY only)
+            last_trade_ts[symbol] = int(time.time())
 
             time.sleep(random.randint(5, 25))
 
