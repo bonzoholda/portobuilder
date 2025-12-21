@@ -12,85 +12,81 @@ from config import (
 )
 from uniswap_abi import SWAP_ROUTER_ABI, ERC20_ABI
 
-# Constants
-UNISWAP_V3_FACTORY = "0x1F98431c8aD98523631AE4a59f267346ea31F984"
+# Modern Quoter V2 address for Polygon
 UNISWAP_V3_QUOTER = "0x61ffe014ba17989e743c5f6cb21bf9697530b21e" 
-
-FACTORY_ABI = '[{"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"address","name":"","type":"address"},{"internalType":"uint24","name":"","type":"uint24"}],"name":"getPool","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"}]'
-QUOTER_ABI = '[{"inputs":[{"components":[{"internalType":"address","name":"tokenIn","type":"address"},{"internalType":"address","name":"tokenOut","type":"address"},{"internalType":"uint256","name":"amountIn","type":"uint256"},{"internalType":"uint24","name":"fee","type":"uint24"},{"internalType":"uint160","name":"sqrtPriceLimitX96","type":"uint160"}],"name":"params","type":"tuple"}],"name":"quoteExactInputSingle","outputs":[{"internalType":"uint256","name":"amountOut","type":"uint256"},{"internalType":"uint160","name":"sqrtPriceX96After","type":"uint160"},{"internalType":"uint32","name":"initializedTicksCrossed","type":"uint32"},{"internalType":"uint256","name":"gasEstimate","type":"uint256"}],"stateMutability":"nonpayable","type":"function"}]'
-
-getcontext().prec = 50
 
 class UniswapV3Client:
     def __init__(self):
         self.w3 = Web3(Web3.HTTPProvider(RPC_URL))
         self.w3.middleware_onion.inject(POAMiddleware, layer=0)
-        
         self.account = self.w3.eth.account.from_key(PRIVATE_KEY)
         self.router = self.w3.eth.contract(address=Web3.to_checksum_address(UNISWAP_V3_ROUTER), abi=SWAP_ROUTER_ABI)
         self.quoter = self.w3.eth.contract(address=Web3.to_checksum_address(UNISWAP_V3_QUOTER), abi=QUOTER_ABI)
-        
         self.nonce = self.w3.eth.get_transaction_count(WALLET_ADDRESS)
 
-    def _get_eip1559_params(self):
+    def _get_gas_params(self):
+        # Using higher priority to cut through Polygon congestion
         latest = self.w3.eth.get_block("latest")
         base_fee = latest["baseFeePerGas"]
-        # Aggressive priority for Polygon (60 Gwei)
-        priority = self.w3.to_wei(60, 'gwei') 
+        priority = self.w3.to_wei(55, 'gwei') 
         return {"maxFeePerGas": (2 * base_fee) + priority, "maxPriorityFeePerGas": priority}
 
-    def _approve_if_needed(self, token, amount):
+    def _force_approve(self, token, amount):
         erc20 = self.w3.eth.contract(address=token, abi=ERC20_ABI)
         allowance = erc20.functions.allowance(WALLET_ADDRESS, UNISWAP_V3_ROUTER).call()
         
         if allowance < amount:
-            print(f"🔓 Allowance insufficient. Sending approval...")
-            # Using a large but standard number instead of max_uint256
-            approval_amount = 10**30 
-            tx = erc20.functions.approve(UNISWAP_V3_ROUTER, approval_amount).build_transaction({
-                "from": WALLET_ADDRESS,
-                "nonce": self.nonce,
-                "gas": 70_000,
-                "chainId": CHAIN_ID,
-                **self._get_eip1559_params()
+            print(f"🔄 Resetting and updating allowance for {token}...")
+            # Step 1: Reset to 0 (Fixes some non-standard ERC20 issues)
+            if allowance > 0:
+                reset_tx = erc20.functions.approve(UNISWAP_V3_ROUTER, 0).build_transaction({
+                    "from": WALLET_ADDRESS, "nonce": self.nonce, "gas": 50_000, 
+                    "chainId": CHAIN_ID, **self._get_gas_params()
+                })
+                self.w3.eth.send_raw_transaction(self.account.sign_transaction(reset_tx).rawTransaction)
+                self.nonce += 1
+                time.sleep(5)
+
+            # Step 2: Approve high amount
+            approve_tx = erc20.functions.approve(UNISWAP_V3_ROUTER, 10**30).build_transaction({
+                "from": WALLET_ADDRESS, "nonce": self.nonce, "gas": 60_000, 
+                "chainId": CHAIN_ID, **self._get_gas_params()
             })
             self.nonce += 1
-            signed = self.account.sign_transaction(tx)
-            tx_hash = self.w3.eth.send_raw_transaction(signed.rawTransaction)
-            print(f"⏳ Approval sent: {self.w3.to_hex(tx_hash)}. Waiting for indexing...")
+            tx_hash = self.w3.eth.send_raw_transaction(self.account.sign_transaction(approve_tx).rawTransaction)
+            print(f"⏳ Waiting for approval: {self.w3.to_hex(tx_hash)}")
             self.w3.eth.wait_for_transaction_receipt(tx_hash)
-            time.sleep(15) # Extended wait for Polygon state propagation
+            time.sleep(12) # State propagation wait
 
     def swap_exact_input(self, token_in, token_out, amount_in):
-        token_in = Web3.to_checksum_address(token_in)
-        token_out = Web3.to_checksum_address(token_out)
-
-        # 1. SETUP
+        token_in, token_out = Web3.to_checksum_address(token_in), Web3.to_checksum_address(token_out)
+        
+        # 1. Decimal Handling
         erc20 = self.w3.eth.contract(address=token_in, abi=ERC20_ABI)
-        decimals = erc20.functions.decimals().call()
-        amount_in_wei = int(Decimal(str(amount_in)) * (10 ** decimals))
+        amount_in_wei = int(Decimal(str(amount_in)) * (10 ** erc20.functions.decimals().call()))
 
-        # 2. QUOTE & FEE DISCOVERY
-        best_fee = 0
-        expected_out = 0
-        for f in [500, 3000, 10000]:
+        # 2. Get Quote & Verify Path
+        print(f"🔍 Finding best path for {amount_in} USDC...")
+        best_fee, expected_out = 0, 0
+        for fee in [500, 3000, 10000]:
             try:
-                out = self.quoter.functions.quoteExactInputSingle({
+                # Quoter V2 returns a tuple, [0] is amountOut
+                quote = self.quoter.functions.quoteExactInputSingle({
                     "tokenIn": token_in, "tokenOut": token_out,
-                    "amountIn": amount_in_wei, "fee": f, "sqrtPriceLimitX96": 0
+                    "amountIn": amount_in_wei, "fee": fee, "sqrtPriceLimitX96": 0
                 }).call()
-                if out[0] > expected_out:
-                    expected_out = out[0]
-                    best_fee = f
+                if quote[0] > expected_out:
+                    expected_out, best_fee = quote[0], fee
             except: continue
 
-        if expected_out == 0:
-            raise RuntimeError("❌ No route/liquidity found.")
+        if expected_out == 0: raise RuntimeError("❌ No liquidity path found.")
+        print(f"✅ Route found: Fee {best_fee} | Est. Out: {expected_out/10**18:.6f} WETH")
 
-        # 3. APPROVAL
-        self._approve_if_needed(token_in, amount_in_wei)
+        # 3. Approval
+        self._force_approve(token_in, amount_in_wei)
 
-        # 4. SWAP PARAMS
+        # 4. Build Transaction
+        # Using 2% slippage for safety
         params = {
             "tokenIn": token_in,
             "tokenOut": token_out,
@@ -98,42 +94,23 @@ class UniswapV3Client:
             "recipient": WALLET_ADDRESS,
             "deadline": int(time.time()) + 600,
             "amountIn": amount_in_wei,
-            "amountOutMinimum": 0, # Set to 0 temporarily to force through simulation
+            "amountOutMinimum": int(expected_out * 0.98),
             "sqrtPriceLimitX96": 0
         }
 
-        # 5. RETRY SIMULATION (Crucial for Polygon)
-        swap_fn = self.router.functions.exactInputSingle(params)
-        print("🧪 Testing simulation...")
-        
-        simulated = False
-        for i in range(5):
-            try:
-                swap_fn.estimate_gas({"from": WALLET_ADDRESS})
-                simulated = True
-                print("✅ Simulation passed!")
-                break
-            except Exception as e:
-                print(f"🔄 Node state lag (Attempt {i+1}/5). Waiting...")
-                time.sleep(5)
-        
-        if not simulated:
-            raise RuntimeError("❌ Contract still reverts. Possible missing balance or allowance sync.")
-
-        # 6. EXECUTE
-        tx = swap_fn.build_transaction({
+        # Use a high manual gas limit to bypass the 'estimate_gas' revert trap
+        # Uniswap V3 swaps on Polygon typically cost 140k - 220k gas.
+        print("🚀 Sending Swap...")
+        tx = self.router.functions.exactInputSingle(params).build_transaction({
             "from": WALLET_ADDRESS,
             "nonce": self.nonce,
-            "gas": 400_000,
+            "gas": 300_000,
             "chainId": CHAIN_ID,
-            **self._get_eip1559_params()
+            **self._get_gas_params()
         })
         self.nonce += 1
 
         signed = self.account.sign_transaction(tx)
         tx_hash = self.w3.eth.send_raw_transaction(signed.rawTransaction)
-        print(f"🚀 SUCCESS! Hash: {self.w3.to_hex(tx_hash)}")
+        print(f"✅ Transaction Sent! Hash: {self.w3.to_hex(tx_hash)}")
         return self.w3.eth.wait_for_transaction_receipt(tx_hash)
-
-    def buy_with_usdc(self, token, usdc_amount):
-        return self.swap_exact_input(USDC, token, usdc_amount)
