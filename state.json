@@ -1,13 +1,7 @@
 {
-  "daily_loss": 0,
-  "positions": {
-    "WETH": {
-      "token": "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
-      "entry_price": 1850.25,
-      "amount": 0.001143,
-      "tp1_done": true,
-      "tp2_done": false,
-      "trail_stop": null
-    }
-  }
+  "day": "2025-12-21",
+  "daily_realized_pnl": 0.0,
+  "daily_unrealized_pnl": 0.0,
+  "positions": {},
+  "trading_enabled": true
 }
