@@ -1,0 +1,5 @@
+web3==6.15.1
+requests
+pandas
+ta
+python-dotenv
