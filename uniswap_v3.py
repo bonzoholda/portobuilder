@@ -1,8 +1,12 @@
 import time
 from web3 import Web3
 from decimal import Decimal, getcontext
-# Import the middleware
-from web3.middleware import ExtraDataToPOAMiddleware 
+# Try both names for compatibility across web3.py versions
+try:
+    from web3.middleware import ExtraDataToPOAMiddleware as POAMiddleware
+except ImportError:
+    from web3.middleware import geth_poa_middleware as POAMiddleware
+
 from config import (
     RPC_URL,
     PRIVATE_KEY,
@@ -19,8 +23,8 @@ class UniswapV3Client:
     def __init__(self):
         self.w3 = Web3(Web3.HTTPProvider(RPC_URL))
         
-        # --- FIX: Inject PoA Middleware for Polygon ---
-        self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+        # Inject the middleware using the alias we created above
+        self.w3.middleware_onion.inject(POAMiddleware, layer=0)
         
         if not self.w3.is_connected():
             raise RuntimeError("❌ RPC not connected")
@@ -37,12 +41,7 @@ class UniswapV3Client:
             abi=SWAP_ROUTER_ABI
         )
         
-        # Local nonce tracking to prevent "replacement transaction underpriced"
         self.nonce = self.w3.eth.get_transaction_count(WALLET_ADDRESS)
-
-    # -------------------------
-    # Internal helpers
-    # -------------------------
 
     def _get_next_nonce(self):
         current_nonce = self.nonce
@@ -50,10 +49,9 @@ class UniswapV3Client:
         return current_nonce
 
     def _get_eip1559_params(self):
-        """Dynamic gas fees for Polygon EIP-1559."""
         latest_block = self.w3.eth.get_block("latest")
         base_fee = latest_block["baseFeePerGas"]
-        priority_fee = self.w3.to_wei(30, 'gwei') 
+        priority_fee = self.w3.to_wei(35, 'gwei') # Bumped slightly for Polygon speed
         max_fee = (2 * base_fee) + priority_fee
         
         return {
@@ -84,10 +82,6 @@ class UniswapV3Client:
         print(f"[APPROVE] {self.w3.to_hex(tx_hash)}")
         self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
 
-    # -------------------------
-    # Core swap
-    # -------------------------
-
     def swap_exact_input(self, token_in, token_out, amount_in, fee=500):
         token_in = Web3.to_checksum_address(token_in)
         token_out = Web3.to_checksum_address(token_out)
@@ -98,7 +92,6 @@ class UniswapV3Client:
 
         self._approve_if_needed(token_in, amount_in_wei)
 
-        # Structure matches exactInputSingle(params)
         params = {
             "tokenIn": token_in,
             "tokenOut": token_out,
@@ -114,11 +107,10 @@ class UniswapV3Client:
         swap_fn = self.router.functions.exactInputSingle(params)
 
         try:
-            # Note: value: 0 because we are swapping tokens, not native MATIC
             estimated_gas = swap_fn.estimate_gas({"from": WALLET_ADDRESS, "value": 0})
-            gas_limit = int(estimated_gas * 1.2)
+            gas_limit = int(estimated_gas * 1.3) # 30% buffer for swaps
         except Exception:
-            gas_limit = 350_000
+            gas_limit = 400_000
 
         tx = swap_fn.build_transaction({
             "from": WALLET_ADDRESS,
