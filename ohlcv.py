@@ -2,6 +2,11 @@ import requests
 import pandas as pd
 
 BINANCE_KLINES = "https://api.binance.com/api/v3/klines"
+BINANCE_SYMBOL_MAP = {
+    "WETH": "ETH",
+    "WMATIC": "POL",
+    "WBTC": "BTC",
+}
 
 TF_MAP = {
     "15m": "15m",
@@ -14,7 +19,9 @@ def load_ohlcv(symbol: str, timeframe: str, limit: int = 200) -> pd.DataFrame:
     if timeframe not in TF_MAP:
         raise ValueError("Unsupported timeframe")
 
-    pair = f"{symbol}USDT"  # CEX proxy
+    base = BINANCE_SYMBOL_MAP.get(symbol, symbol)
+    pair = f"{base}USDT"
+    
     params = {
         "symbol": pair,
         "interval": TF_MAP[timeframe],
