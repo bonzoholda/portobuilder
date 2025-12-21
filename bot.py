@@ -111,10 +111,14 @@ while True:
                 if df_htf.empty or df_ltf.empty:
                     continue
 
+                print(f"Checking {symbol}")
+                
                 if not htf_ok(df_htf):
+                    print(f"❌ HTF fail {symbol}")
                     continue
 
                 if not entry_ok(df_ltf):
+                    print(f"❌ Entry fail {symbol}")
                     continue
 
                 token_addr = TOKEN_BY_SYMBOL[symbol]
