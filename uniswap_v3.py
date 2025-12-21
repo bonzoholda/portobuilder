@@ -66,53 +66,51 @@ class UniswapV3Client:
         token_in = Web3.to_checksum_address(token_in)
         token_out = Web3.to_checksum_address(token_out)
 
-        # 1. FIND THE REAL POOL (Fee Tier Check)
-        # We scan for liquidity before we even try the swap
+        # 1. SCAN FOR LIQUIDITY (The "Fee Tier" Fix)
+        # Native USDC often lives in 3000 (0.3%) while USDC.e lives in 500 (0.05%)
+        print(f"🔍 Scanning for pool liquidity...")
         fee = self._find_best_fee(token_in, token_out)
-        if not fee:
-            raise RuntimeError(f"❌ No Uniswap V3 pool found for this pair at any fee tier.")
         
-        # 2. DECIMALS & AMOUNTS
+        if not fee:
+            raise RuntimeError(f"❌ No valid pool found for {token_in} -> {token_out} on any fee tier.")
+        
+        print(f"✅ Found active pool at fee tier: {fee}")
+
+        # 2. SETUP AMOUNTS
         erc20 = self.w3.eth.contract(address=token_in, abi=ERC20_ABI)
         decimals = erc20.functions.decimals().call()
         amount_in_wei = int(Decimal(str(amount_in)) * (10 ** decimals))
 
-        # 3. APPROVAL (Must be checked every time)
+        # 3. VERIFY APPROVAL
         self._approve_if_needed(token_in, amount_in_wei)
 
-        # 4. BUILD PARAMS
+        # 4. PREPARE PARAMETERS
         params = {
             "tokenIn": token_in,
             "tokenOut": token_out,
             "fee": fee,
             "recipient": WALLET_ADDRESS,
-            "deadline": int(time.time()) + 1200, # 20 mins deadline
+            "deadline": int(time.time()) + 1200,
             "amountIn": amount_in_wei,
             "amountOutMinimum": 0,
             "sqrtPriceLimitX96": 0
         }
 
+        # 5. SIMULATION WITH ERROR TRAPPING
         swap_fn = self.router.functions.exactInputSingle(params)
-
-        # 5. DIAGNOSTIC SIMULATION
         try:
-            # Using estimate_gas provides a better error message than .call()
-            print(f"🧪 Simulating swap via fee tier {fee}...")
+            # We use a 20% gas buffer check here
+            print(f"🧪 Final simulation for fee {fee}...")
             swap_fn.estimate_gas({"from": WALLET_ADDRESS})
         except Exception as e:
-            # If this fails, we catch the EXACT string from the contract
-            error_str = str(e).upper()
-            if "STF" in error_str:
-                msg = "Safe Transfer Failed (Check Allowance/Balance)"
-            elif "TF" in error_str:
-                msg = "Transfer Failed"
-            elif "LOK" in error_str:
-                msg = "Pool Locked"
-            else:
-                msg = f"Contract Logic Error: {e}"
-            raise RuntimeError(f"❌ {msg}")
+            # If it STILL fails, it might be a specific Uniswap error
+            err = str(e).upper()
+            if "STF" in err:
+                raise RuntimeError("❌ Revert: Safe Transfer Failed. (Check if Approval TX is still pending on Polygonscan)")
+            raise RuntimeError(f"❌ Contract Revert: {e}")
 
-        # ... [Rest of the build_transaction and sign logic] ...
+        # 6. EXECUTE
+        # [Rest of your build_transaction logic here]
     
         gas_params = self._get_eip1559_params()
         tx = swap_fn.build_transaction({
