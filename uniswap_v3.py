@@ -18,18 +18,45 @@ class UniswapV3Client:
     def _approve(self, token, amount):
         token = Web3.to_checksum_address(token)
         erc20 = self.w3.eth.contract(token, abi=ERC20_ABI)
+    
+        allowance = erc20.functions.allowance(
+            WALLET_ADDRESS,
+            UNISWAP_V3_ROUTER
+        ).call()
+    
+        nonce = self.w3.eth.get_transaction_count(WALLET_ADDRESS)
+    
+        # USDT safety: reset to 0 first if needed
+        if allowance > 0:
+            tx0 = erc20.functions.approve(
+                UNISWAP_V3_ROUTER,
+                0
+            ).build_transaction({
+                "from": WALLET_ADDRESS,
+                "nonce": nonce,
+                "gas": 80000,
+                "gasPrice": self.w3.eth.gas_price,
+            })
+    
+            signed0 = self.account.sign_transaction(tx0)
+            self.w3.eth.send_raw_transaction(signed0.rawTransaction)
+            time.sleep(2)
+            nonce += 1
+    
         tx = erc20.functions.approve(
             UNISWAP_V3_ROUTER,
             amount
         ).build_transaction({
             "from": WALLET_ADDRESS,
-            "nonce": self.w3.eth.get_transaction_count(WALLET_ADDRESS),
+            "nonce": nonce,
             "gas": 100000,
-            "gasPrice": self.w3.eth.gas_price
+            "gasPrice": self.w3.eth.gas_price,
         })
+    
         signed = self.account.sign_transaction(tx)
         self.w3.eth.send_raw_transaction(signed.rawTransaction)
-        time.sleep(3)
+        time.sleep(2)
+
 
 def swap_exact_input(
     self,
