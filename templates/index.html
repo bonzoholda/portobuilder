@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DEX Bot Dashboard</title>
+    <style>
+        body {
+            background: #0d1117;
+            color: #e6edf3;
+            font-family: Arial;
+            padding: 20px;
+        }
+        .card {
+            background: #161b22;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+        }
+        th, td {
+            padding: 6px;
+            text-align: left;
+        }
+        .green { color: #3fb950; }
+        .red { color: #f85149; }
+    </style>
+</head>
+<body>
+
+<h2>📊 Polygon Uniswap Bot</h2>
+
+<div class="card">
+    <h3>Balances</h3>
+    <table>
+        {% for b in balances %}
+        <tr><td>{{ b["asset"] }}</td><td>{{ b["amount"] }}</td></tr>
+        {% endfor %}
+    </table>
+</div>
+
+<div class="card">
+    <h3>PnL</h3>
+    <p>Daily: <span class="{{ 'green' if daily_pnl >= 0 else 'red' }}">{{ daily_pnl }}</span></p>
+    <p>Total: <span class="{{ 'green' if total_pnl >= 0 else 'red' }}">{{ total_pnl }}</span></p>
+</div>
+
+<div class="card">
+    <h3>Recent Trades</h3>
+    <table>
+        <tr><th>Pair</th><th>Side</th><th>In</th><th>Out</th><th>Tx</th></tr>
+        {% for t in trades %}
+        <tr>
+            <td>{{ t["pair"] }}</td>
+            <td>{{ t["side"] }}</td>
+            <td>{{ t["amount_in"] }}</td>
+            <td>{{ t["amount_out"] }}</td>
+            <td>{{ t["tx_hash"][:10] }}...</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+
+</body>
+</html>
