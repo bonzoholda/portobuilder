@@ -116,3 +116,25 @@ class UniswapV3Client:
             signed = self.account.sign_transaction(tx)
             h = self.w3.eth.send_raw_transaction(signed.rawTransaction)
             self.w3.eth.wait_for_transaction_receipt(h)
+
+    # -------------------------
+    # Convenience wrappers
+    # -------------------------
+
+    def buy_with_usdc(self, token, usdc_amount):
+        """Wrapper to buy a token using USDC."""
+        print(f"💰 [BUY] USDC → {token} | Amount: ${usdc_amount}")
+        return self.swap_exact_input(
+            token_in=USDC,
+            token_out=token,
+            amount_in=usdc_amount
+        )
+
+    def sell_to_usdc(self, token, token_amount):
+        """Wrapper to sell a token back to USDC."""
+        print(f"k [SELL] {token} → USDC | Amount: {token_amount}")
+        return self.swap_exact_input(
+            token_in=token,
+            token_out=USDC,
+            amount_in=token_amount
+        )
