@@ -86,6 +86,15 @@ class UniswapV3Client:
         token_in = Web3.to_checksum_address(token_in)
         token_out = Web3.to_checksum_address(token_out)
 
+        # 1. Check if the pool even exists
+        # Uniswap V3 Factory Address on Polygon: 0x1F98431c8aD98523631AE4a59f267346ea31F984
+        factory_abi = '[{"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"address","name":"","type":"address"},{"internalType":"uint24","name":"","type":"uint24"}],"name":"getPool","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"}]'
+        factory = self.w3.eth.contract(address="0x1F98431c8aD98523631AE4a59f267346ea31F984", abi=factory_abi)
+        pool_address = factory.functions.getPool(token_in, token_out, fee).call()
+        
+        if pool_address == "0x0000000000000000000000000000000000000000":
+            raise RuntimeError(f"❌ No pool found for {token_in} / {token_out} at fee {fee}")
+        
         erc20 = self.w3.eth.contract(address=token_in, abi=ERC20_ABI)
         decimals = erc20.functions.decimals().call()
         amount_in_wei = int(Decimal(str(amount_in)) * (10 ** decimals))
