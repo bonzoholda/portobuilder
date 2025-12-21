@@ -33,8 +33,8 @@ class UniswapV3Client:
 
     def _get_gas_params(self):
         latest = self.w3.eth.get_block("latest")
-        # Polygon requires a significant priority fee to prioritize transactions
-        priority = self.w3.to_wei(50, 'gwei') 
+        # Increase priority to 70 Gwei to beat Polygon's internal state lag
+        priority = self.w3.to_wei(70, 'gwei') 
         return {
             "maxFeePerGas": int(latest["baseFeePerGas"] * 2) + priority,
             "maxPriorityFeePerGas": priority,
@@ -69,44 +69,56 @@ class UniswapV3Client:
         erc20 = self.w3.eth.contract(address=token_in, abi=ERC20_ABI)
         amount_in_wei = int(Decimal(str(amount_in)) * (10 ** erc20.functions.decimals().call()))
 
-        # 1. VERIFY ALLOWANCE
-        current_allowance = erc20.functions.allowance(WALLET_ADDRESS, UNISWAP_V3_ROUTER).call()
-        if current_allowance < amount_in_wei:
-            print(f"🔓 Approving {token_in}...")
-            tx = erc20.functions.approve(UNISWAP_V3_ROUTER, 2**256-1).build_transaction({
+        # 1. THE "CLEAN" APPROVAL
+        # We check the allowance, if it's not effectively infinite, we reset it.
+        allowance = erc20.functions.allowance(WALLET_ADDRESS, UNISWAP_V3_ROUTER).call()
+        if allowance < amount_in_wei:
+            print(f"🔓 Updating Allowance for Native USDC...")
+            # Using a specific large hex value that Native USDC prefers
+            max_val = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+            tx = erc20.functions.approve(UNISWAP_V3_ROUTER, max_val).build_transaction({
                 "from": WALLET_ADDRESS, "nonce": self.nonce, "gas": 60000, **self._get_gas_params()
             })
             self.nonce += 1
             self.w3.eth.send_raw_transaction(self.account.sign_transaction(tx).rawTransaction)
-            time.sleep(10) # Essential wait for Polygon indexing
+            print("⏳ Approval sent. Waiting 20 seconds for Polygon state sync...")
+            time.sleep(20) # Native USDC on Polygon is slow to register approvals
 
-        # 2. SWAP PARAMS
-        # Note: We use 5% slippage (0.95) to ensure the test buy works
-        params = {
-            "tokenIn": token_in,
-            "tokenOut": token_out,
-            "fee": 500, # Start with the 0.05% pool
-            "recipient": WALLET_ADDRESS,
-            "deadline": int(time.time()) + 600,
-            "amountIn": amount_in_wei,
-            "amountOutMinimum": 0, # Forced 0 for testing purposes
-            "sqrtPriceLimitX96": 0
-        }
+        # 2. ENCODING THE SWAP
+        # We will use the exactInputSingle parameters
+        deadline = int(time.time()) + 600
+        
+        # Try the 3000 fee (0.3%) for Native USDC, as 500 (0.05%) often lacks depth for Native
+        # Let's try 3000 this time to rule out liquidity gaps
+        fee_tier = 3000 
 
-        print("🚀 Executing Swap...")
-        # Build without simulation to bypass the lag
+        params = (
+            token_in,
+            token_out,
+            fee_tier,
+            WALLET_ADDRESS,
+            deadline,
+            amount_in_wei,
+            0, # amountOutMinimum
+            0  # sqrtPriceLimitX96
+        )
+
+        print(f"🚀 Swapping {amount_in} USDC via Tier {fee_tier}...")
+        
+        # 3. EXECUTION WITH HIGH GAS
+        # We use 500,000 gas to ensure it never runs out during the complex V3 internal logic
         tx = self.router.functions.exactInputSingle(params).build_transaction({
             "from": WALLET_ADDRESS,
             "nonce": self.nonce,
-            "gas": 250000, # Generous limit
+            "gas": 500000,
             **self._get_gas_params()
         })
         self.nonce += 1
         
         signed = self.account.sign_transaction(tx)
-        hash = self.w3.eth.send_raw_transaction(signed.rawTransaction)
-        print(f"✅ Transaction Sent: {self.w3.to_hex(hash)}")
-        return self.w3.eth.wait_for_transaction_receipt(hash)
+        tx_hash = self.w3.eth.send_raw_transaction(signed.rawTransaction)
+        print(f"✅ Sent! Hash: {self.w3.to_hex(tx_hash)}")
+        return self.w3.eth.wait_for_transaction_receipt(tx_hash)
 
     def buy_with_usdc(self, token, usdc_amount):
         return self.swap_exact_input(USDC, token, usdc_amount)
