@@ -66,39 +66,54 @@ class UniswapV3Client:
         token_in = Web3.to_checksum_address(token_in)
         token_out = Web3.to_checksum_address(token_out)
 
+        # 1. FIND THE REAL POOL (Fee Tier Check)
+        # We scan for liquidity before we even try the swap
         fee = self._find_best_fee(token_in, token_out)
-        if not fee: raise RuntimeError("❌ No valid Uniswap V3 pool found.")
-
+        if not fee:
+            raise RuntimeError(f"❌ No Uniswap V3 pool found for this pair at any fee tier.")
+        
+        # 2. DECIMALS & AMOUNTS
         erc20 = self.w3.eth.contract(address=token_in, abi=ERC20_ABI)
         decimals = erc20.functions.decimals().call()
         amount_in_wei = int(Decimal(str(amount_in)) * (10 ** decimals))
-        
-        # Balance check
-        bal = erc20.functions.balanceOf(WALLET_ADDRESS).call()
-        if bal < amount_in_wei:
-            raise RuntimeError(f"❌ Balance too low: {bal / 10**decimals} < {amount_in}")
 
+        # 3. APPROVAL (Must be checked every time)
         self._approve_if_needed(token_in, amount_in_wei)
 
+        # 4. BUILD PARAMS
         params = {
             "tokenIn": token_in,
             "tokenOut": token_out,
             "fee": fee,
             "recipient": WALLET_ADDRESS,
-            "deadline": int(time.time()) + 600,
+            "deadline": int(time.time()) + 1200, # 20 mins deadline
             "amountIn": amount_in_wei,
             "amountOutMinimum": 0,
             "sqrtPriceLimitX96": 0
         }
 
         swap_fn = self.router.functions.exactInputSingle(params)
-        
-        # Final Simulation
-        try:
-            swap_fn.call({"from": WALLET_ADDRESS})
-        except Exception as e:
-            raise RuntimeError(f"❌ Contract Revert during simulation: {e}")
 
+        # 5. DIAGNOSTIC SIMULATION
+        try:
+            # Using estimate_gas provides a better error message than .call()
+            print(f"🧪 Simulating swap via fee tier {fee}...")
+            swap_fn.estimate_gas({"from": WALLET_ADDRESS})
+        except Exception as e:
+            # If this fails, we catch the EXACT string from the contract
+            error_str = str(e).upper()
+            if "STF" in error_str:
+                msg = "Safe Transfer Failed (Check Allowance/Balance)"
+            elif "TF" in error_str:
+                msg = "Transfer Failed"
+            elif "LOK" in error_str:
+                msg = "Pool Locked"
+            else:
+                msg = f"Contract Logic Error: {e}"
+            raise RuntimeError(f"❌ {msg}")
+
+        # ... [Rest of the build_transaction and sign logic] ...
+    
         gas_params = self._get_eip1559_params()
         tx = swap_fn.build_transaction({
             "from": WALLET_ADDRESS,
