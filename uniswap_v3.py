@@ -126,8 +126,20 @@ class UniswapV3Client:
 
     def buy_with_usdc(self, token, usdc_amount):
         print(f"[BUY] USDC → {token} | ${usdc_amount}")
-        return self.swap_exact_input(USDC, token, usdc_amount)
+        return self.swap_exact_input(
+            token_in=USDC,
+            token_out=token,
+            amount_in=usdc_amount,
+            fee=500  # ✅ Polygon canonical pool
+        )
+
 
     def sell_to_usdc(self, token, token_amount):
         print(f"[SELL] {token} → USDC | amount {token_amount}")
-        return self.swap_exact_input(token, USDC, token_amount)
+        return self.swap_exact_input(
+            token_in=token,
+            token_out=USDC,
+            amount_in=token_amount,
+            fee=500
+        )
+
