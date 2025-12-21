@@ -89,6 +89,22 @@ while True:
                     p["token1"].get("symbol")
                 ]
 
+                # ===== FORCED TEST BUY (REMOVE AFTER TEST) =====
+                if symbol == "WETH":
+                    print("🚨 FORCED TEST BUY WETH")
+                
+                    tx = client.buy_with_usdc(
+                        token_addr=TOKEN_BY_SYMBOL["WETH"],
+                        usdc_amount=TRADE_USDC_AMOUNT
+                    )
+                
+                    print("TX:", tx)
+                
+                    # stop bot after test trade
+                    time.sleep(999999)
+                # ==============================================
+
+                
                 if "USDC" not in symbols:
                     continue
 
