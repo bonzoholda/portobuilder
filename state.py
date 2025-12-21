@@ -12,8 +12,7 @@ MAX_DAILY_LOSS = -1.5  # USDC
 
 def init_db():
     """
-    Placeholder for future DB.
-    Ensures state file exists.
+    Ensure state file exists.
     """
     if not os.path.exists(STATE_FILE):
         save_state(_default_state())
@@ -24,12 +23,13 @@ def _default_state():
         "date": time.strftime("%Y-%m-%d"),
         "daily_pnl": 0.0,
         "last_trade_ts": 0,
-        "trades": []  # trade history
+        "meta": {},
+        "trades": []
     }
 
 
 # -------------------------
-# State handling
+# Load / Save
 # -------------------------
 
 def load_state():
@@ -51,12 +51,31 @@ def save_state(state):
         json.dump(state, f, indent=2)
 
 
+# -------------------------
+# Controls
+# -------------------------
+
 def can_trade(state):
     return state["daily_pnl"] > MAX_DAILY_LOSS
 
 
 # -------------------------
-# Trade & PnL helpers
+# Metadata
+# -------------------------
+
+def set_meta(state, **kwargs):
+    """
+    Store runtime metadata.
+    Example:
+        set_meta(state, network="polygon", base="USDC")
+    """
+    state.setdefault("meta", {})
+    state["meta"].update(kwargs)
+    save_state(state)
+
+
+# -------------------------
+# Trades & PnL
 # -------------------------
 
 def record_trade(
@@ -67,9 +86,6 @@ def record_trade(
     tx_hash: str,
     price: float | None = None
 ):
-    """
-    Records a trade event (BUY / SELL).
-    """
     trade = {
         "ts": int(time.time()),
         "side": side,
