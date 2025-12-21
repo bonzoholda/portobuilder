@@ -103,7 +103,7 @@ while True:
                     print("🚨 FORCED TEST BUY WETH")
                 
                     tx = client.buy_with_usdc(
-                        token_addr=TOKEN_BY_SYMBOL["WETH"],
+                        token=TOKEN_BY_SYMBOL["WETH"],
                         usdc_amount=TRADE_USDC_AMOUNT
                     )
                 
