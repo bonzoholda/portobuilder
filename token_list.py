@@ -1,0 +1,4 @@
+TOKEN_BY_SYMBOL = {
+    "WETH": "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+    "WBTC": "0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6",
+}
