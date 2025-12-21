@@ -97,7 +97,7 @@ class UniswapV3Client:
             "tokenOut": token_out,
             "fee": fee,
             "recipient": WALLET_ADDRESS,
-            "deadline": int(time.time()) + 120,
+            "deadline": int(time.time()) + 600,
             "amountIn": amount_in_wei,
             "amountOutMinimum": 0,
             "sqrtPriceLimitX96": 0
@@ -109,8 +109,13 @@ class UniswapV3Client:
         try:
             estimated_gas = swap_fn.estimate_gas({"from": WALLET_ADDRESS, "value": 0})
             gas_limit = int(estimated_gas * 1.3) # 30% buffer for swaps
-        except Exception:
-            gas_limit = 400_000
+            print("🔍 Simulating swap to check for errors...")
+            swap_fn.call({"from": WALLET_ADDRESS})
+            print("✅ Simulation successful!")
+        except Exception as e:
+                    # This will capture the actual revert reason (e.g., "STF" or "TF")
+                    print(f"❌ Simulation failed! Reason: {e}")
+                    raise RuntimeError(f"Contract would revert: {e}")
 
         tx = swap_fn.build_transaction({
             "from": WALLET_ADDRESS,
