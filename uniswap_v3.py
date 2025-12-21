@@ -1,6 +1,15 @@
 import time
 from web3 import Web3
-from decimal import Decimal
+from decimal import Decimal, getcontext
+try:
+    from web3.middleware import ExtraDataToPOAMiddleware as POAMiddleware
+except ImportError:
+    from web3.middleware import geth_poa_middleware as POAMiddleware
+
+from config import (
+    RPC_URL, PRIVATE_KEY, WALLET_ADDRESS,
+    UNISWAP_V3_ROUTER, USDC, CHAIN_ID
+)
 from uniswap_abi import SWAP_ROUTER_ABI, ERC20_ABI
 
 # Use the Router02 for better compatibility on Polygon
