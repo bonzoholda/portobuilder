@@ -1,3 +1,4 @@
+import random
 import time
 from pair_scanner import get_safe_pairs
 from strategy import htf_ok, entry_ok, exit_levels
@@ -5,6 +6,7 @@ from risk import load_state, save_state, can_trade
 from uniswap_v3 import UniswapClient
 
 client = UniswapClient()
+LAST_TRADE_COOLDOWN = 1800  # 30 min
 
 while True:
     state = load_state()
@@ -28,6 +30,7 @@ while True:
             tx = client.buy_with_usdc(TOKEN_ADDRESS, 2.4)
             print("TX:", tx)
 
-            time.sleep(30)
+            time.sleep(random.randint(5, 25))
+
 
     time.sleep(300)
