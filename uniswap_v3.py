@@ -1,6 +1,8 @@
 import time
 from web3 import Web3
 from decimal import Decimal, getcontext
+# Import the middleware
+from web3.middleware import ExtraDataToPOAMiddleware 
 from config import (
     RPC_URL,
     PRIVATE_KEY,
@@ -16,6 +18,10 @@ getcontext().prec = 50
 class UniswapV3Client:
     def __init__(self):
         self.w3 = Web3(Web3.HTTPProvider(RPC_URL))
+        
+        # --- FIX: Inject PoA Middleware for Polygon ---
+        self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+        
         if not self.w3.is_connected():
             raise RuntimeError("❌ RPC not connected")
 
@@ -31,7 +37,7 @@ class UniswapV3Client:
             abi=SWAP_ROUTER_ABI
         )
         
-        # Initialize local nonce tracking
+        # Local nonce tracking to prevent "replacement transaction underpriced"
         self.nonce = self.w3.eth.get_transaction_count(WALLET_ADDRESS)
 
     # -------------------------
@@ -39,19 +45,15 @@ class UniswapV3Client:
     # -------------------------
 
     def _get_next_nonce(self):
-        """Returns current nonce and increments the local counter."""
         current_nonce = self.nonce
         self.nonce += 1
         return current_nonce
 
     def _get_eip1559_params(self):
-        """Fetches dynamic gas fees for Polygon EIP-1559."""
+        """Dynamic gas fees for Polygon EIP-1559."""
         latest_block = self.w3.eth.get_block("latest")
         base_fee = latest_block["baseFeePerGas"]
-        
-        # Priority fee (tip) - 30 Gwei is usually safe for Polygon
         priority_fee = self.w3.to_wei(30, 'gwei') 
-        # Max fee should be (2 * base_fee) + priority_fee to handle volatility
         max_fee = (2 * base_fee) + priority_fee
         
         return {
@@ -62,30 +64,23 @@ class UniswapV3Client:
     def _approve_if_needed(self, token_address, amount):
         token_address = Web3.to_checksum_address(token_address)
         erc20 = self.w3.eth.contract(token_address, abi=ERC20_ABI)
-
-        allowance = erc20.functions.allowance(
-            WALLET_ADDRESS,
-            UNISWAP_V3_ROUTER
-        ).call()
+        allowance = erc20.functions.allowance(WALLET_ADDRESS, UNISWAP_V3_ROUTER).call()
 
         if allowance >= amount:
             return
 
         print(f"🔓 Approving token: {token_address}...")
-        
         gas_params = self._get_eip1559_params()
-        tx_params = {
+        tx = erc20.functions.approve(UNISWAP_V3_ROUTER, amount).build_transaction({
             "from": WALLET_ADDRESS,
             "nonce": self._get_next_nonce(),
-            "gas": 60_000,
+            "gas": 65_000,
             "chainId": CHAIN_ID,
             **gas_params
-        }
+        })
 
-        tx = erc20.functions.approve(UNISWAP_V3_ROUTER, amount).build_transaction(tx_params)
         signed = self.account.sign_transaction(tx)
         tx_hash = self.w3.eth.send_raw_transaction(signed.rawTransaction)
-        
         print(f"[APPROVE] {self.w3.to_hex(tx_hash)}")
         self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
 
@@ -97,14 +92,13 @@ class UniswapV3Client:
         token_in = Web3.to_checksum_address(token_in)
         token_out = Web3.to_checksum_address(token_out)
 
-        # Get decimals and calculate Wei
         erc20 = self.w3.eth.contract(address=token_in, abi=ERC20_ABI)
         decimals = erc20.functions.decimals().call()
         amount_in_wei = int(Decimal(str(amount_in)) * (10 ** decimals))
 
-        # Handle approval
         self._approve_if_needed(token_in, amount_in_wei)
 
+        # Structure matches exactInputSingle(params)
         params = {
             "tokenIn": token_in,
             "tokenOut": token_out,
@@ -112,44 +106,39 @@ class UniswapV3Client:
             "recipient": WALLET_ADDRESS,
             "deadline": int(time.time()) + 120,
             "amountIn": amount_in_wei,
-            "amountOutMinimum": 0,  # Slippage protection (0 = high risk)
+            "amountOutMinimum": 0,
             "sqrtPriceLimitX96": 0
         }
 
         gas_params = self._get_eip1559_params()
-        tx_base = {
-            "from": WALLET_ADDRESS,
-            "nonce": self._get_next_nonce(),
-            "value": 0,
-            "chainId": CHAIN_ID,
-            **gas_params
-        }
-
         swap_fn = self.router.functions.exactInputSingle(params)
 
         try:
+            # Note: value: 0 because we are swapping tokens, not native MATIC
             estimated_gas = swap_fn.estimate_gas({"from": WALLET_ADDRESS, "value": 0})
-            tx_base["gas"] = int(estimated_gas * 1.2)
-        except Exception as e:
-            print(f"⚠️ Gas estimation failed: {e}. Using fallback gas.")
-            tx_base["gas"] = 350_000
+            gas_limit = int(estimated_gas * 1.2)
+        except Exception:
+            gas_limit = 350_000
 
-        tx = swap_fn.build_transaction(tx_base)
+        tx = swap_fn.build_transaction({
+            "from": WALLET_ADDRESS,
+            "nonce": self._get_next_nonce(),
+            "gas": gas_limit,
+            "value": 0,
+            "chainId": CHAIN_ID,
+            **gas_params
+        })
+
         signed = self.account.sign_transaction(tx)
         tx_hash = self.w3.eth.send_raw_transaction(signed.rawTransaction)
-
         print(f"[SWAP] Sent: {self.w3.to_hex(tx_hash)}")
-        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         
+        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         if receipt.status != 1:
             raise RuntimeError(f"❌ Swap reverted: {self.w3.to_hex(tx_hash)}")
 
         print(f"✅ Swap confirmed in block {receipt.blockNumber}")
         return self.w3.to_hex(tx_hash)
-
-    # -------------------------
-    # Convenience wrappers
-    # -------------------------
 
     def buy_with_usdc(self, token, usdc_amount):
         return self.swap_exact_input(USDC, token, usdc_amount, fee=500)
