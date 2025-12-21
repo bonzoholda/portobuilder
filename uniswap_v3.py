@@ -76,7 +76,7 @@ class UniswapV3Client:
     # Core swap
     # -------------------------
 
-    def swap_exact_input(self, token_in, token_out, amount_in, fee=3000):
+    def swap_exact_input(self, token_in, token_out, amount_in, fee=500):
         token_in = Web3.to_checksum_address(token_in)
         token_out = Web3.to_checksum_address(token_out)
 
