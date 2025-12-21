@@ -1,140 +1,100 @@
 import sqlite3
+import json
 import time
-import os
 
-DB_FILE = "bot.db"
-MAX_DAILY_LOSS = -1.5  # USDC
+DB_FILE = "trader.db"
+STATE_FILE = "state.json"
 
 
-# -------------------------
-# DB Init
-# -------------------------
+# ================= DATABASE =================
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
-    cur = conn.cursor()
+    c = conn.cursor()
 
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS meta (
-        key TEXT PRIMARY KEY,
-        value TEXT
-    )
-    """)
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS trades (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ts INTEGER,
-        side TEXT,
-        symbol TEXT,
-        amount REAL,
-        price REAL,
-        tx TEXT
-    )
-    """)
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS pnl (
-        date TEXT PRIMARY KEY,
-        daily_pnl REAL
-    )
-    """)
-
-    conn.commit()
-    conn.close()
-
-
-# -------------------------
-# Controls
-# -------------------------
-
-def can_trade(state):
-    return state["daily_pnl"] > MAX_DAILY_LOSS
-
-
-# -------------------------
-# State helpers
-# -------------------------
-
-def load_state():
-    today = time.strftime("%Y-%m-%d")
-
-    conn = sqlite3.connect(DB_FILE)
-    cur = conn.cursor()
-
-    cur.execute("SELECT daily_pnl FROM pnl WHERE date=?", (today,))
-    row = cur.fetchone()
-
-    if row is None:
-        cur.execute(
-            "INSERT INTO pnl (date, daily_pnl) VALUES (?, ?)",
-            (today, 0.0)
+    # ---- Trades table ----
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS trades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp INTEGER NOT NULL,
+            pair TEXT NOT NULL,
+            side TEXT NOT NULL,
+            amount_in REAL NOT NULL,
+            amount_out REAL NOT NULL,
+            price REAL,
+            tx TEXT
         )
-        daily_pnl = 0.0
-    else:
-        daily_pnl = row[0]
+    """)
 
-    conn.commit()
-    conn.close()
-
-    return {
-        "date": today,
-        "daily_pnl": daily_pnl
-    }
-
-
-def update_pnl(state, pnl_delta):
-    state["daily_pnl"] += pnl_delta
-
-    conn = sqlite3.connect(DB_FILE)
-    cur = conn.cursor()
-
-    cur.execute(
-        "UPDATE pnl SET daily_pnl=? WHERE date=?",
-        (state["daily_pnl"], state["date"])
-    )
-
-    conn.commit()
-    conn.close()
-
-
-# -------------------------
-# Metadata
-# -------------------------
-
-def set_meta(state=None, **kwargs):
-    conn = sqlite3.connect(DB_FILE)
-    cur = conn.cursor()
-
-    for k, v in kwargs.items():
-        cur.execute(
-            "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
-            (k, str(v))
+    # ---- Meta table ----
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS meta (
+            key TEXT PRIMARY KEY,
+            value REAL
         )
+    """)
 
     conn.commit()
     conn.close()
 
 
-# -------------------------
-# Trades
-# -------------------------
-
-def record_trade(side, symbol, amount, tx_hash, price=None):
+def record_trade(pair, side, amount_in, amount_out, price, tx):
     conn = sqlite3.connect(DB_FILE)
-    cur = conn.cursor()
+    c = conn.cursor()
 
-    cur.execute("""
-    INSERT INTO trades (ts, side, symbol, amount, price, tx)
-    VALUES (?, ?, ?, ?, ?, ?)
+    c.execute("""
+        INSERT INTO trades (
+            timestamp, pair, side, amount_in, amount_out, price, tx
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
     """, (
         int(time.time()),
+        pair,
         side,
-        symbol,
-        amount,
+        amount_in,
+        amount_out,
         price,
-        tx_hash
+        tx
     ))
 
     conn.commit()
     conn.close()
+
+
+def set_meta(key, value):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+
+    c.execute("""
+        INSERT INTO meta (key, value)
+        VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value=excluded.value
+    """, (key, value))
+
+    conn.commit()
+    conn.close()
+
+
+def get_meta(key, default=0):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+
+    c.execute("SELECT value FROM meta WHERE key = ?", (key,))
+    row = c.fetchone()
+
+    conn.close()
+    return row[0] if row else default
+
+
+# ================= BOT STATE =================
+
+def load_state():
+    try:
+        with open(STATE_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_state(state):
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f)
