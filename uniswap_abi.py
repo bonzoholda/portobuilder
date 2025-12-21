@@ -25,24 +25,37 @@ SWAP_ROUTER_ABI = [
 
 ERC20_ABI = [
     {
-        "name": "approve",
-        "type": "function",
+        "constant": True,
+        "inputs": [
+            {"name": "owner", "type": "address"},
+            {"name": "spender", "type": "address"}
+        ],
+        "name": "allowance",
+        "outputs": [{"name": "", "type": "uint256"}],
+        "type": "function"
+    },
+    {
+        "constant": False,
         "inputs": [
             {"name": "spender", "type": "address"},
             {"name": "amount", "type": "uint256"}
         ],
-        "outputs": [{"name": "", "type": "bool"}]
+        "name": "approve",
+        "outputs": [{"name": "", "type": "bool"}],
+        "type": "function"
     },
     {
-        "name": "decimals",
-        "type": "function",
-        "inputs": [],
-        "outputs": [{"name": "", "type": "uint8"}]
-    },
-    {
+        "constant": True,
+        "inputs": [{"name": "account", "type": "address"}],
         "name": "balanceOf",
-        "type": "function",
-        "inputs": [{"name": "owner", "type": "address"}],
-        "outputs": [{"name": "", "type": "uint256"}]
+        "outputs": [{"name": "", "type": "uint256"}],
+        "type": "function"
+    },
+    {
+        "constant": True,
+        "inputs": [],
+        "name": "decimals",
+        "outputs": [{"name": "", "type": "uint8"}],
+        "type": "function"
     }
 ]
