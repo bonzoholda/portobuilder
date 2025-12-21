@@ -9,6 +9,10 @@ from config import (
     CHAIN_ID
 )
 from uniswap_abi import SWAP_ROUTER_ABI, ERC20_ABI
+from decimal import Decimal, getcontext
+getcontext().prec = 50
+
+USDC_DECIMALS = 6  # Polygon canonical USDC
 
 
 class UniswapV3Client:
