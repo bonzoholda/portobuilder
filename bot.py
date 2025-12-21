@@ -89,6 +89,15 @@ while True:
                     p["token1"].get("symbol")
                 ]
 
+            
+                if "USDC" not in symbols:
+                    continue
+
+                symbol = symbols[0] if symbols[1] == "USDC" else symbols[1]
+
+                if symbol not in TOKEN_BY_SYMBOL:
+                    continue
+
                 # ===== FORCED TEST BUY (REMOVE AFTER TEST) =====
                 if symbol == "WETH":
                     print("🚨 FORCED TEST BUY WETH")
@@ -103,16 +112,8 @@ while True:
                     # stop bot after test trade
                     time.sleep(999999)
                 # ==============================================
-
                 
-                if "USDC" not in symbols:
-                    continue
-
-                symbol = symbols[0] if symbols[1] == "USDC" else symbols[1]
-
-                if symbol not in TOKEN_BY_SYMBOL:
-                    continue
-
+                
                 last_trade = state.get("last_trade", {}).get(symbol, 0)
                 if time.time() - last_trade < LAST_TRADE_COOLDOWN:
                     continue
