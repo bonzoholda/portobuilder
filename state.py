@@ -6,6 +6,15 @@ STATE_FILE = "bot_state.json"
 MAX_DAILY_LOSS = -1.5  # USDC
 
 
+def init_db():
+    """
+    Placeholder init for future DB.
+    Ensures state file exists.
+    """
+    if not os.path.exists(STATE_FILE):
+        save_state(_default_state())
+
+
 def _default_state():
     return {
         "date": time.strftime("%Y-%m-%d"),
