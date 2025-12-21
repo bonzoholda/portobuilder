@@ -9,7 +9,7 @@ load_dotenv()
 from pair_scanner import get_safe_pairs
 from strategy import htf_ok, entry_ok
 from risk import load_state, save_state, can_trade
-from uniswap_v3 import UniswapClient
+from uniswap_v3 import UniswapV3Client as UniswapClient
 from state import (
     init_db,
     record_trade,
