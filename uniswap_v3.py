@@ -84,44 +84,64 @@ class UniswapV3Client:
         token_in = Web3.to_checksum_address(token_in)
         token_out = Web3.to_checksum_address(token_out)
 
-        erc20 = self.w3.eth.contract(token_in, abi=ERC20_ABI)
+        # 1. Handle Decimals correctly
+        erc20 = self.w3.eth.contract(address=token_in, abi=ERC20_ABI)
         decimals = erc20.functions.decimals().call()
-        amount_in_wei = int(amount_in * (10 ** decimals))
+        
+        # Ensure we use integer for Wei calculation
+        amount_in_wei = int(Decimal(str(amount_in)) * (10 ** decimals))
 
-        min_out = 0  # TODO: Quoter + slippage protection
-
+        # 2. Check and Approve
         self._approve_if_needed(token_in, amount_in_wei)
 
-        params = (
-            token_in,
-            token_out,
-            fee,
-            WALLET_ADDRESS,
-            int(time.time()) + 60,
-            amount_in_wei,
-            min_out,
-            0
-        )
+        # 3. Prepare ExactInputSingleParams struct
+        # Structure: (tokenIn, tokenOut, fee, recipient, deadline, amountIn, amountOutMinimum, sqrtPriceLimitX96)
+        params = {
+            "tokenIn": token_in,
+            "tokenOut": token_out,
+            "fee": fee,
+            "recipient": WALLET_ADDRESS,
+            "deadline": int(time.time()) + 60,
+            "amountIn": amount_in_wei,
+            "amountOutMinimum": 0, # Note: Set to 0 for testing; use Quoter for production
+            "sqrtPriceLimitX96": 0
+        }
 
-        tx = self.router.functions.exactInputSingle(params).build_transaction({
+        # 4. Build Transaction with Dynamic Gas
+        base_tx_params = {
             "from": WALLET_ADDRESS,
             "nonce": self._get_nonce(),
-            "gas": 350_000,
-            "gasPrice": int(self.w3.eth.gas_price * 1.1),
             "value": 0,
             "chainId": CHAIN_ID,
-        })
+        }
 
+        # Use the dictionary/struct inside the function call
+        swap_fn = self.router.functions.exactInputSingle(params)
+        
+        try:
+            # Estimate gas instead of hardcoding
+            estimated_gas = swap_fn.estimate_gas(base_tx_params)
+            base_tx_params["gas"] = int(estimated_gas * 1.2) # Add 20% buffer
+        except Exception as e:
+            print(f"⚠️ Gas estimation failed: {e}. Falling back to manual limit.")
+            base_tx_params["gas"] = 400_000
+
+        # Add gas price (EIP-1559 is preferred on Polygon, but keeping your logic)
+        base_tx_params["gasPrice"] = int(self.w3.eth.gas_price * 1.1)
+
+        tx = swap_fn.build_transaction(base_tx_params)
+
+        # 5. Sign and Send
         signed = self.account.sign_transaction(tx)
         tx_hash = self.w3.eth.send_raw_transaction(signed.rawTransaction)
 
-        print(f"[SWAP] {self.w3.to_hex(tx_hash)}")
+        print(f"[SWAP] Sent: {self.w3.to_hex(tx_hash)}")
 
         receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         if receipt.status != 1:
-            raise RuntimeError("❌ Swap reverted on-chain")
+            raise RuntimeError(f"❌ Swap reverted: {self.w3.to_hex(tx_hash)}")
 
-        print("✅ Swap confirmed in block", receipt.blockNumber)
+        print(f"✅ Swap confirmed in block {receipt.blockNumber}")
         return self.w3.to_hex(tx_hash)
 
     # -------------------------
