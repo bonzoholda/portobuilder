@@ -3,3 +3,4 @@ requests
 pandas
 ta
 python-dotenv
+flask==3.0.0
