@@ -25,7 +25,9 @@ while True:
             continue
 
         if entry_ok(df_ltf):
-            client.buy(symbol, usdc_amount=2.4)
+            tx = client.buy_with_usdc(TOKEN_ADDRESS, 2.4)
+            print("TX:", tx)
+
             time.sleep(30)
 
     time.sleep(300)
