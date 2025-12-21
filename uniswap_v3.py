@@ -82,7 +82,7 @@ class UniswapV3Client:
         print(f"[APPROVE] {self.w3.to_hex(tx_hash)}")
         self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
 
-def swap_exact_input(self, token_in, token_out, amount_in, fee=500):
+    def swap_exact_input(self, token_in, token_out, amount_in, fee=500):
         token_in = Web3.to_checksum_address(token_in)
         token_out = Web3.to_checksum_address(token_out)
 
