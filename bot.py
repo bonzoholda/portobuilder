@@ -8,6 +8,13 @@ from uniswap_v3 import UniswapClient
 client = UniswapClient()
 LAST_TRADE_COOLDOWN = 1800  # 30 min
 
+MAX_DAILY_LOSS = -1.5  # USDT
+
+if daily_pnl <= MAX_DAILY_LOSS:
+    print("🛑 Kill switch activated")
+    time.sleep(86400)
+
+
 while True:
     state = load_state()
     if not can_trade(state):
