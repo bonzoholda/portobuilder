@@ -1,18 +1,35 @@
-# Polygon Mainnet
-CHAIN_ID = 137
-RPC_URL = "https://polygon-rpc.com"
+import os
+from dotenv import load_dotenv
 
-WALLET_ADDRESS = "0xYOUR_WALLET"
-PRIVATE_KEY = "YOUR_PRIVATE_KEY"
+load_dotenv()
 
-BASE_TOKEN = "USDC"
+CHAIN_ID = int(os.getenv("CHAIN_ID", 137))
+
+RPC_URL = os.getenv("RPC_URL")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY")
+WALLET_ADDRESS = os.getenv("WALLET_ADDRESS")
+
+if not RPC_URL or not PRIVATE_KEY or not WALLET_ADDRESS:
+    raise RuntimeError("Missing environment variables")
+
+# ================= TOKENS =================
+
+USDT = "0xc2132D05D31c914a87C6611C10748AaCB9dFf"
+
+# ================= UNISWAP V3 =================
+
+UNISWAP_V3_ROUTER = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"
+
+SLIPPAGE = 0.003
+MAX_PRICE_IMPACT_BPS = 30
+
 
 # Capital management (for $20)
 POSITION_SIZE = 0.12       # 12% per trade
 MAX_POSITIONS = 2
 
 MAX_DAILY_LOSS = 0.01      # 1%
-SLIPPAGE = 0.003           # 0.3%
+
 
 # Pair safety
 MIN_TVL = 5_000_000
