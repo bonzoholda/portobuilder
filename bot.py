@@ -57,7 +57,7 @@ def get_price(symbol):
     try:
         # OKX uses 'SYMBOL-USDT' format
         # We map MATIC and WETH to their tradeable pairs
-        mapping = {"WMATIC": "MATIC", "WETH": "ETH", "WBTC": "BTC"}
+        mapping = {"WMATIC": "POL", "WETH": "ETH", "WBTC": "BTC"}
         ticker_symbol = mapping.get(symbol.upper(), symbol.upper())
         
         url = f"https://www.okx.com/api/v5/market/ticker?instId={ticker_symbol}-USDT"
