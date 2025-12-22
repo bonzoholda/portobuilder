@@ -34,7 +34,11 @@
     <h3>Balances</h3>
     <table>
         {% for b in balances %}
-        <tr><td>{{ b["asset"] }}</td><td>{{ b["amount"] }}</td></tr>
+        <tr>
+            <td><strong>{{ b.asset }}</strong></td>
+            <td>{{ "%.6f"|format(b.amount) }}</td> </tr>
+        {% else %}
+        <tr><td colspan="2">No balances synced yet.</td></tr>
         {% endfor %}
     </table>
 </div>
@@ -51,12 +55,14 @@
         <tr><th>Pair</th><th>Side</th><th>In</th><th>Out</th><th>Tx</th></tr>
         {% for t in trades %}
         <tr>
-            <td>{{ t["pair"] }}</td>
-            <td>{{ t["side"] }}</td>
-            <td>{{ t["amount_in"] }}</td>
-            <td>{{ t["amount_out"] }}</td>
-            <td>{{ t["tx_hash"][:10] }}...</td>
+            <td>{{ t.pair }}</td>
+            <td class="{{ 'green' if t.side == 'BUY' else 'red' }}">{{ t.side }}</td>
+            <td>{{ t.amount_in }}</td>
+            <td>{{ t.amount_out }}</td>
+            <td><a href="https://polygonscan.com/tx/{{ t.tx }}" target="_blank" style="color: #58a6ff;">{{ t.tx[:10] }}...</a></td>
         </tr>
+        {% else %}
+        <tr><td colspan="5">No trades recorded.</td></tr>
         {% endfor %}
     </table>
 </div>
