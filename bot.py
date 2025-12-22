@@ -76,20 +76,24 @@ def get_daily_pnl():
     return pnl
 
 def sync_balances(w3, wallet, tokens):
-    print("🔄 Syncing balances to dashboard...")
+    total_portfolio_value = 0
+    
     for symbol, token_addr, decimals in tokens:
-        try:
-            if token_addr == "MATIC":
-                bal = w3.eth.get_balance(wallet) / 1e18
+        # 1. Get Balance
+        if token_addr == "MATIC":
+            bal = w3.eth.get_balance(wallet) / 1e18
+            price = get_current_price("MATIC") # Implement a price fetcher
+        else:
+            erc20 = w3.eth.contract(address=Web3.to_checksum_address(token_addr), abi=ERC20_ABI)
+            bal = erc20.functions.balanceOf(wallet).call() / (10 ** decimals)
+            
+            if symbol == "USDC":
+                price = 1.0
             else:
-                # Ensure address is checksummed for Web3.py
-                checksum_addr = Web3.to_checksum_address(token_addr)
-                contract = w3.eth.contract(address=checksum_addr, abi=ERC20_ABI)
-                raw_bal = contract.functions.balanceOf(wallet).call()
-                bal = raw_bal / (10 ** decimals)
+                price = get_current_price(symbol)
 
-            # Push to trader.db via state.py
-            set_balance(symbol, bal)
+        # 2. Save to DB with price
+        set_balance(symbol, bal, price)
             
         except Exception as e:
             print(f"⚠️ Error syncing {symbol}: {e}")
