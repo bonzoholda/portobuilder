@@ -1,6 +1,7 @@
 import sqlite3
 import json
 import time
+import os
 
 # Create a robust path that works locally and on Railway
 if os.path.exists("/app/data"): # Railway Volume mount point
