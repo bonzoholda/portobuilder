@@ -16,7 +16,6 @@ else:
 
 print(f"DEBUG: System successfully set DB path to: {DB}")
 
-DB = DB_PATH
 
 def query(sql, params=()):
     # Add check to see if DB exists to prevent crashing
