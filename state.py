@@ -2,7 +2,14 @@ import sqlite3
 import json
 import time
 
-DB_FILE = "trader.db"
+# Create a robust path that works locally and on Railway
+if os.path.exists("/app/data"): # Railway Volume mount point
+    DB = "/app/data/trader.db"
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    DB = os.path.join(BASE_DIR, "trader.db")
+
+DB_FILE = DB
 STATE_FILE = "state.json"
 
 
