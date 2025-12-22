@@ -1,5 +1,5 @@
 from state import get_meta, set_meta
-from portfolio import calculate_portfolio_value
+from portfolio import get_portfolio_value as calculate_portfolio_value
 
 # ================= CONFIG =================
 
