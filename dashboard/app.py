@@ -1,47 +1,34 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from equity_data import load_equity
-import json
 
 app = FastAPI()
+templates = Jinja2Templates(directory="templates")
+
+
+@app.get("/", response_class=HTMLResponse)
+def dashboard(request: Request):
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "balances": [],
+            "total_portfolio": 0,
+            "daily_pnl": 0,
+            "total_pnl": 0,
+            "trades": []
+        }
+    )
+
 
 @app.get("/equity", response_class=HTMLResponse)
-def equity_page():
+def equity_page(request: Request):
     data = load_equity()
-
-    return f"""
-    <html>
-    <head>
-        <title>Portfolio Equity</title>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    </head>
-    <body style="background:#0f1115;color:#eee;font-family:sans-serif">
-        <h2>Portfolio Equity Curve</h2>
-        <canvas id="chart" height="100"></canvas>
-
-        <script>
-            const data = {json.dumps(data)};
-            const ctx = document.getElementById('chart');
-
-            new Chart(ctx, {{
-                type: 'line',
-                data: {{
-                    labels: data.map(d => d.time),
-                    datasets: [{{
-                        label: 'Total Equity ($)',
-                        data: data.map(d => d.equity),
-                        borderWidth: 2,
-                        tension: 0.25
-                    }}]
-                }},
-                options: {{
-                    scales: {{
-                        x: {{ display: false }},
-                        y: {{ beginAtZero: false }}
-                    }}
-                }}
-            }});
-        </script>
-    </body>
-    </html>
-    """
+    return templates.TemplateResponse(
+        "equity.html",
+        {
+            "request": request,
+            "equity_data": data
+        }
+    )
