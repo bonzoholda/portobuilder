@@ -5,9 +5,12 @@ import os
 
 
 app = Flask(__name__)
-# 2. Fix: Ensure the DB path is absolute so Railway can find it consistently
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB = os.path.join(BASE_DIR, "trader.db")
+# Create a robust path that works locally and on Railway
+if os.path.exists("/app/data"): # Railway Volume mount point
+    DB = "/app/data/trader.db"
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    DB = os.path.join(BASE_DIR, "trader.db")
 
 
 def query(sql, params=()):
