@@ -22,6 +22,7 @@ from uniswap_abi import ERC20_ABI
 from config import WALLET_ADDRESS, USDC # Assuming USDC is defined in config
 
 import sqlite3
+import requests
 
 # ================= CONFIG =================
 # 1. Define Decimals manually for non-18 decimal tokens
@@ -56,6 +57,19 @@ client = UniswapV3Client()
 print("✅ Bot started")
 
 # ================= HELPERS =================
+
+def get_price(symbol):
+    if symbol == "USDC": return 1.0
+    try:
+        # Simple CoinGecko fetch
+        url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol.lower()}&vs_currencies=usd"
+        # Mapping for common tokens
+        mapping = {"MATIC": "matic-network", "WETH": "weth", "WBTC": "wrapped-bitcoin"}
+        coin_id = mapping.get(symbol, symbol.lower())
+        res = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd")
+        return res.json()[coin_id]['usd']
+    except:
+        return 0.0
 
 def today_timestamp():
     return int(datetime.now(timezone.utc).replace(
