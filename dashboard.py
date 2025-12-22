@@ -5,14 +5,9 @@ import os
 
 
 app = Flask(__name__)
-# FORCE THE VOLUME PATH
-if os.path.isdir("/app/data"):
-    DB = "/app/data/trader.db"
-else:
-    # Local development fallback
-    DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trader.db")
-
-print(f"DEBUG: Final DB Path being used: {DB}")
+# Simple and reliable for same-container setups
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB = os.path.join(BASE_DIR, "trader.db")
 
 
 def query(sql, params=()):
