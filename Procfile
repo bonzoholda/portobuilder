@@ -1,1 +1,1 @@
-web: python dashboard.py & python bot.py
+web: python bot.py & gunicorn dashboard:app --bind 0.0.0.0:$PORT
