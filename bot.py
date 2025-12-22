@@ -23,7 +23,7 @@ from baseline import (
     check_and_update_baseline,
     get_or_init_baseline
 )
-from portfolio import get_portfolio_value
+from portfolio import get_portfolio_value, visualize_portfolio
 
 from web3 import Web3
 from uniswap_abi import ERC20_ABI
@@ -152,6 +152,11 @@ while True:
         # ✅ PROBE 1 — PORTFOLIO VALUE VISIBILITY
         portfolio_value = get_portfolio_value()
         log_activity(f"📊 Portfolio value = ${portfolio_value:.4f}")
+
+        baseline = get_meta("portfolio_baseline", 0)
+        current_value = portfolio_value
+        
+        visualize_portfolio(baseline, current_value)
 
         state = load_state()
         daily_pnl = get_daily_pnl()
