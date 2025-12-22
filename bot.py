@@ -14,6 +14,9 @@ from state import init_db, record_trade, set_meta
 from ohlcv import load_ohlcv
 from token_list import TOKEN_BY_SYMBOL
 
+from state import set_balance
+from web3 import Web3
+
 import sqlite3
 
 # ================= CONFIG =================
@@ -50,7 +53,16 @@ def get_daily_pnl():
     conn.close()
     return pnl
 
+def sync_balances(w3, wallet, tokens):
+    for symbol, token_addr, decimals in tokens:
+        if token_addr == "MATIC":
+            bal = w3.eth.get_balance(wallet) / 1e18
+        else:
+            erc20 = w3.eth.contract(token_addr, abi=ERC20_ABI)
+            bal = erc20.functions.balanceOf(wallet).call() / (10 ** decimals)
 
+        set_balance(symbol, bal)
+        
 # ================= MAIN LOOP =================
 
 while True:
@@ -143,6 +155,8 @@ while True:
 
                 state.setdefault("last_trade", {})[symbol] = int(time.time())
                 save_state(state)
+
+                sync_balances()
 
                 time.sleep(random.randint(5, 25))
 
