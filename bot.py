@@ -55,18 +55,28 @@ print("✅ Bot started")
 def get_price(symbol):
     if symbol == "USDC": return 1.0
     try:
-        # Mapping for common tokens to CoinGecko IDs
+        # Improved mapping to CoinGecko IDs
         mapping = {
-            "MATIC": "matic-network", 
-            "WETH": "weth", 
-            "WBTC": "wrapped-bitcoin",
-            "LINK": "chainlink",
-            "UNI": "uniswap"
+            "MATIC": "pol", 
+            "WMATIC": "pol",
+            "WETH": "eth", 
+            "ETH": "ethereum",
+            "WBTC": "btc",
+            "LINK": "link",
+            "UNI": "uni"
         }
-        coin_id = mapping.get(symbol, symbol.lower())
+        coin_id = mapping.get(symbol.upper(), symbol.lower())
         url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd"
+        
         res = requests.get(url, timeout=10)
-        return res.json()[coin_id]['usd']
+        data = res.json()
+        
+        # Safely extract the price
+        if coin_id in data and 'usd' in data[coin_id]:
+            return float(data[coin_id]['usd'])
+        else:
+            print(f"⚠️ Price data missing for {coin_id}: {data}")
+            return 0.0
     except Exception as e:
         print(f"⚠️ Price fetch error for {symbol}: {e}")
         return 0.0
