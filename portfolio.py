@@ -33,7 +33,7 @@ def get_native_price_usd():
         return 0
 
 
-def calculate_portfolio_value():
+def get_portfolio_value():
     balances = get_balances()
     total = 0.0
 
