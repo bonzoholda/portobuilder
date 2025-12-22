@@ -35,13 +35,28 @@ def init_db():
         )
     """)
 
+    # ---- Updated Balances table ----
     c.execute("""
     CREATE TABLE IF NOT EXISTS balances (
         asset TEXT PRIMARY KEY,
         amount REAL,
-        price REAL DEFAULT 0
+        price REAL DEFAULT 0,
+        tp1_hit INTEGER DEFAULT 0,
+        tp2_hit INTEGER DEFAULT 0,
+        ath REAL DEFAULT 0
     )
     """)
+    
+    # Safety: Add columns if the table already existed without them
+    try:
+        c.execute("ALTER TABLE balances ADD COLUMN tp1_hit INTEGER DEFAULT 0")
+    except: pass
+    try:
+        c.execute("ALTER TABLE balances ADD COLUMN tp2_hit INTEGER DEFAULT 0")
+    except: pass
+    try:
+        c.execute("ALTER TABLE balances ADD COLUMN ath REAL DEFAULT 0")
+    except: pass
     
     # ---- Meta table ----
     c.execute("""
