@@ -49,3 +49,19 @@ def get_portfolio_value():
             total += 0
 
     return round(total, 6)
+
+
+def visualize_portfolio(baseline, current):
+    delta = current - baseline
+    pct = (delta / baseline * 100) if baseline > 0 else 0
+
+    sign = "+" if delta >= 0 else "-"
+    armed = "✅" if delta > 0 else "❌"
+
+    print(
+        f"📊 Portfolio Status\n"
+        f"   Baseline : ${baseline:.4f}\n"
+        f"   Current  : ${current:.4f}\n"
+        f"   Delta    : {sign}${abs(delta):.4f} ({pct:.2f}%)\n"
+        f"   Trail    : Armed {armed}"
+    )
