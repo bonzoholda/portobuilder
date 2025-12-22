@@ -32,16 +32,24 @@
 <h2>📊 Polygon Uniswap Bot</h2>
 
 <div class="card">
-    <h3>Balances</h3>
+    <h3>Portfolio Summary</h3>
+    <h1 style="color: #3fb950; margin: 0;">${{ total_portfolio }}</h1>
+    <p style="color: #8b949e; margin-top: 5px;">Total Estimated Value (USD)</p>
+    
+    <hr style="border: 0.1px solid #30363d; margin: 15px 0;">
+
     <table>
-        <tr><th>Asset</th><th>Amount</th></tr>
+        <tr>
+            <th>Asset</th>
+            <th>Amount</th>
+            <th>Value (USD)</th>
+        </tr>
         {% for b in balances %}
         <tr>
             <td><strong>{{ b.asset }}</strong></td>
             <td>{{ "%.6f"|format(b.amount) }}</td>
+            <td class="green">${{ "%.2f"|format(b.usd_value) }}</td>
         </tr>
-        {% else %}
-        <tr><td colspan="2" style="color: gray;">Waiting for bot sync...</td></tr>
         {% endfor %}
     </table>
 </div>
