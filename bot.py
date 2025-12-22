@@ -263,9 +263,9 @@ while True:
                 if any(ap['asset'] == symbol for ap in get_active_positions()):
                     continue
 
-                df_htf = load_ohlcv(symbol, "30m")
+                df_htf = load_ohlcv(symbol, "1h")
                 if df_htf is not None and htf_ok(df_htf):
-                    df_ltf = load_ohlcv(symbol, "3m")
+                    df_ltf = load_ohlcv(symbol, "5m")
                     if entry_ok(df_ltf):
                         usdc_amount = calculate_trade_size()
                         if usdc_amount < 1:
