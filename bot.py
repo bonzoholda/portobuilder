@@ -344,9 +344,9 @@ while True:
                 if any(ap['asset'] == symbol for ap in active_pos):
                     continue
 
-                df_htf = load_ohlcv(symbol, "4h")
+                df_htf = load_ohlcv(symbol, "1h")
                 if df_htf is not None and htf_ok(df_htf):
-                    df_ltf = load_ohlcv(symbol, "15m")
+                    df_ltf = load_ohlcv(symbol, "5m")
                     if entry_ok(df_ltf):
                         trade_size = calculate_trade_size()
                         if trade_size < 1:
