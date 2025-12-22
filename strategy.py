@@ -85,7 +85,7 @@ def exit_levels(entry_price: float):
     Returns TP levels (for later sell logic).
     """
     return {
-        "tp1": entry_price * 1.015,  # +1.5%
-        "tp2": entry_price * 1.03,   # +3%
-        "sl": entry_price * 0.985,   # -1.5%
+        "tp1": entry_price * 1.006,  # +1.5%
+        "tp2": entry_price * 1.012,   # +3%
+        "sl": entry_price * 0.992,   # -1.5%
     }
