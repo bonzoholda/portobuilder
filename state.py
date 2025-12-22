@@ -9,7 +9,7 @@ if os.path.exists("/app/data"):
     DB_PATH = "/app/data/trader.db"
 else:
     # This is your local computer path
-    DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trader.db")
+    DB_PATH = "trader.db"
 
 DB_FILE = DB_PATH
 STATE_FILE = "state.json"
