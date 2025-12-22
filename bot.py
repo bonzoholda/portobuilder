@@ -57,13 +57,13 @@ def get_price(symbol):
     try:
         # Improved mapping to CoinGecko IDs
         mapping = {
-            "MATIC": "pol", 
-            "WMATIC": "pol",
-            "WETH": "eth", 
+            "MATIC": "matic-network", 
+            "WMATIC": "matic-network",
+            "WETH": "weth", 
             "ETH": "ethereum",
-            "WBTC": "btc",
-            "LINK": "link",
-            "UNI": "uni"
+            "WBTC": "wrapped-bitcoin",
+            "LINK": "chainlink",
+            "UNI": "uniswap"
         }
         coin_id = mapping.get(symbol.upper(), symbol.lower())
         url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd"
