@@ -109,8 +109,8 @@ def sync_balances(w3, wallet, tokens):
         # 2. Save to DB with price
         set_balance(symbol, bal, price)
             
-        except Exception as e:
-            print(f"⚠️ Error syncing {symbol}: {e}")
+    except Exception as e:
+        print(f"⚠️ Error syncing {symbol}: {e}")
         
 # ================= MAIN LOOP =================
 
