@@ -26,6 +26,13 @@ def init_db():
         )
     """)
 
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS balances (
+        asset TEXT PRIMARY KEY,
+        amount REAL
+    )
+    """)
+    
     # ---- Meta table ----
     c.execute("""
         CREATE TABLE IF NOT EXISTS meta (
@@ -59,6 +66,16 @@ def record_trade(pair, side, amount_in, amount_out, price, tx):
     conn.commit()
     conn.close()
 
+def set_balance(asset, amount):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+
+    c.execute("""
+    INSERT OR REPLACE INTO balances VALUES (?,?)
+    """, (asset, amount))
+
+    conn.commit()
+    conn.close()
 
 def set_meta(key, value):
     conn = sqlite3.connect(DB_FILE)
