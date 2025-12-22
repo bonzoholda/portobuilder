@@ -55,7 +55,7 @@ def htf_ok(df_htf: pd.DataFrame) -> bool:
         return False
 
 
-def entry_ok(df_ltf: pd.DataFrame) -> bool:
+def entry_ok_backup(df_ltf: pd.DataFrame) -> bool:
     """
     Entry condition on lower timeframe.
     """
@@ -69,6 +69,26 @@ def entry_ok(df_ltf: pd.DataFrame) -> bool:
         price_above_ema = last["close"] > last["ema50"]
         rsi_ok = 35 < last["rsi"] < 65
         momentum = last["close"] > prev["close"]
+
+        return price_above_ema and rsi_ok and momentum
+
+    except Exception:
+        return False
+
+def entry_ok(df_ltf: pd.DataFrame) -> bool:
+    """
+    Entry condition on lower timeframe.
+    """
+    try:
+        df = add_indicators(df_ltf)
+
+        last = df.iloc[-1]
+        prev = df.iloc[-2]
+
+        # Conditions
+        #price_above_ema = last["close"] > last["ema50"]
+        rsi_ok = last["rsi"] < 45
+        #momentum = last["close"] > prev["close"]
 
         return price_above_ema and rsi_ok and momentum
 
