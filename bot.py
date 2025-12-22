@@ -55,7 +55,6 @@ for symbol, addr in TOKEN_BY_SYMBOL.items():
     if (symbol, addr, decimal) not in TOKENS_TO_TRACK:
         TOKENS_TO_TRACK.append((symbol, addr, decimal))
 
-TRADE_USDC_AMOUNT = 2.4  # fallback only
 LAST_TRADE_COOLDOWN = 1800
 MAX_DAILY_LOSS = -1.5
 LOOP_SLEEP = 300
@@ -150,6 +149,97 @@ def get_portfolio_value():
     for asset, amount, price in rows:
         total += amount * price
     return total
+
+# ================= DYNAMIC SIZING ENGINE =================
+
+def clamp(val, min_v, max_v):
+    return max(min_v, min(val, max_v))
+
+
+def get_portfolio_value():
+    conn = sqlite3.connect("trader.db")
+    c = conn.cursor()
+    c.execute("SELECT COALESCE(SUM(amount * price), 0) FROM balances")
+    val = c.fetchone()[0]
+    conn.close()
+    return val
+
+
+def get_portfolio_health_multiplier():
+    baseline = load_state().get("baseline", 0)
+    if baseline <= 0:
+        return 1.0
+
+    current = get_portfolio_value()
+    growth = (current - baseline) / baseline
+
+    if growth <= -0.015: return 0.7
+    if growth <= 0.0:    return 0.85
+    if growth <= 0.005:  return 1.0
+    if growth <= 0.02:   return 1.15
+    return 1.3
+
+
+def get_momentum_multiplier(N=10):
+    conn = sqlite3.connect("trader.db")
+    c = conn.cursor()
+    c.execute("""
+        SELECT side, amount_out - amount_in
+        FROM trades
+        ORDER BY timestamp DESC
+        LIMIT ?
+    """, (N,))
+    rows = c.fetchall()
+    conn.close()
+
+    if not rows:
+        return 1.0
+
+    wins = sum(1 for _, pnl in rows if pnl > 0)
+    losses = sum(1 for _, pnl in rows if pnl < 0)
+    momentum = (wins - losses) / N
+
+    if momentum <= -0.4: return 0.8
+    if momentum <= 0.0:  return 0.9
+    if momentum <= 0.4:  return 1.1
+    return 1.2
+
+
+def get_volatility_multiplier(df_htf):
+    if df_htf is None or len(df_htf) < 20:
+        return 1.0
+
+    df = df_htf.copy()
+    df["range_pct"] = (df["high"] - df["low"]) / df["close"]
+    vol = df["range_pct"].rolling(20).mean().iloc[-1]
+
+    if vol > 0.08: return 0.7
+    if vol > 0.05: return 0.85
+    if vol < 0.025: return 1.1
+    return 1.0
+
+
+def compute_position_size(df_htf):
+    base = BASE_POSITION_PCT
+    h = get_portfolio_health_multiplier()
+    m = get_momentum_multiplier()
+    v = get_volatility_multiplier(df_htf)
+
+    final_pct = clamp(base * h * m * v,
+                      MIN_POSITION_PCT,
+                      MAX_POSITION_PCT)
+
+    portfolio_usd = get_portfolio_value()
+    usdc_size = portfolio_usd * final_pct
+
+    log_activity(
+        f"📐 Sizing → base:{base:.2f} "
+        f"h:{h:.2f} m:{m:.2f} v:{v:.2f} "
+        f"= {final_pct:.2%} (${usdc_size:.2f})"
+    )
+
+    return usdc_size
+
 
 
 # ================= MAIN LOOP =================
@@ -263,10 +353,17 @@ while True:
                             trade_size = TRADE_USDC_AMOUNT
 
                         log_activity(f"🟢 BUY {symbol} | Size ${trade_size:.2f}")
+                        usdc_amount = compute_position_size(df_htf)
+                        
+                        if usdc_amount < 1:
+                            log_activity(f"⚠️ Position size too small for {symbol}, skipping.")
+                            continue
+                        
                         tx = client.buy_with_usdc(
                             token_addr=TOKEN_BY_SYMBOL[symbol],
-                            usdc_amount=trade_size
+                            usdc_amount=usdc_amount
                         )
+
                         record_trade(
                             f"{symbol}/USDC",
                             "BUY",
