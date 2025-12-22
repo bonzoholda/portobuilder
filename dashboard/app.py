@@ -1,0 +1,47 @@
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+from equity_data import load_equity
+import json
+
+app = FastAPI()
+
+@app.get("/equity", response_class=HTMLResponse)
+def equity_page():
+    data = load_equity()
+
+    return f"""
+    <html>
+    <head>
+        <title>Portfolio Equity</title>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    </head>
+    <body style="background:#0f1115;color:#eee;font-family:sans-serif">
+        <h2>Portfolio Equity Curve</h2>
+        <canvas id="chart" height="100"></canvas>
+
+        <script>
+            const data = {json.dumps(data)};
+            const ctx = document.getElementById('chart');
+
+            new Chart(ctx, {{
+                type: 'line',
+                data: {{
+                    labels: data.map(d => d.time),
+                    datasets: [{{
+                        label: 'Total Equity ($)',
+                        data: data.map(d => d.equity),
+                        borderWidth: 2,
+                        tension: 0.25
+                    }}]
+                }},
+                options: {{
+                    scales: {{
+                        x: {{ display: false }},
+                        y: {{ beginAtZero: false }}
+                    }}
+                }}
+            }});
+        </script>
+    </body>
+    </html>
+    """
