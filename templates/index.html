@@ -73,6 +73,29 @@
 </div>
 
 <div class="card">
+    <h3>📈 Portfolio Equity</h3>
+    <p style="color:#8b949e;">
+        View portfolio growth over time based on snapshot data.
+    </p>
+
+    <button
+        onclick="window.open('/equity', '_blank')"
+        style="
+            background:#238636;
+            color:white;
+            border:none;
+            padding:10px 14px;
+            border-radius:6px;
+            cursor:pointer;
+            font-size:0.9rem;
+        "
+    >
+        Open Equity Curve
+    </button>
+</div>
+    
+    
+<div class="card">
     <h3>PnL</h3>
     <p>Daily: <span class="{{ 'green' if daily_pnl >= 0 else 'red' }}">{{ daily_pnl }}</span></p>
     <p>Total: <span class="{{ 'green' if total_pnl >= 0 else 'red' }}">{{ total_pnl }}</span></p>
