@@ -104,7 +104,7 @@ def sync_balances(w3, wallet, tokens):
             if symbol == "USDC":
                 price = 1.0
             else:
-                price = get_current_price(symbol)
+                price = get_price(symbol)
 
         # 2. Save to DB with price
         set_balance(symbol, bal, price)
