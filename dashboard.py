@@ -28,22 +28,38 @@ def query(sql, params=()):
 
 @app.route("/")
 def index():
-    print(f"DEBUG: Dashboard is looking for DB at: {DB}") # Add this
+    print(f"DEBUG: Dashboard is looking for DB at: {DB}")
     if os.path.exists(DB):
         print(f"DEBUG: File size is {os.path.getsize(DB)} bytes")
     
-    balances = query("SELECT * FROM balances")
-    # --- ADD THIS LINE ---
-    print(f"DEBUG: Found {len(balances)} rows in balances table.")
-    for b in balances:
-        print(f"DEBUG: {b['asset']} = {b['amount']}")
-    # ---------------------
+    # Fetch raw balance rows
+    balance_rows = query("SELECT * FROM balances")
     
-    trades = query("SELECT * FROM trades ORDER BY timestamp DESC LIMIT 20")
+    # --- NEW LOGIC: Calculate USD Values ---
+    balances_with_usd = []
+    total_portfolio_usd = 0.0
+    
+    for b in balance_rows:
+        # Convert sqlite3.Row to dict to add new calculated fields
+        b_dict = dict(b)
+        
+        # Ensure price exists in DB, default to 0 if column is missing
+        price = b_dict.get('price', 0) or 0
+        amount = b_dict.get('amount', 0) or 0
+        
+        usd_value = amount * price
+        total_portfolio_usd += usd_value
+        
+        # Add the calculated value back to the dict for the HTML
+        b_dict['usd_value'] = usd_value
+        balances_with_usd.append(b_dict)
+    
+    print(f"DEBUG: Found {len(balances_with_usd)} balances. Total Portfolio: ${total_portfolio_usd}")
+    # ---------------------------------------
 
+    trades = query("SELECT * FROM trades ORDER BY timestamp DESC LIMIT 20")
     today = int(time.time()) - 86400
     
-    # Use try/except or helper to handle empty DB gracefully
     try:
         daily_rows = query("SELECT SUM(amount_out - amount_in) as pnl FROM trades WHERE timestamp > ?", (today,))
         daily = daily_rows[0]["pnl"] if daily_rows and daily_rows[0]["pnl"] else 0
@@ -55,7 +71,8 @@ def index():
 
     return render_template(
         "index.html",
-        balances=balances,
+        balances=balances_with_usd, # Use the new list with USD values
+        total_portfolio=round(total_portfolio_usd, 2), # New variable for HTML
         trades=trades,
         daily_pnl=round(float(daily), 4),
         total_pnl=round(float(total), 4)
