@@ -252,30 +252,44 @@ while True:
                 )
                 sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
 
-        # ================= ENTRIES =================
-        if can_trade(state):
-            for p in get_safe_pairs() or []:
-                symbols = [p["token0"]["symbol"], p["token1"]["symbol"]]
-                if "USDC" not in symbols:
-                    continue
-
-                symbol = symbols[0] if symbols[1] == "USDC" else symbols[1]
-                if any(ap['asset'] == symbol for ap in get_active_positions()):
-                    continue
-
-                df_htf = load_ohlcv(symbol, "1h")
-                if df_htf is not None and htf_ok(df_htf):
+            # ================= ENTRIES =================
+            if can_trade(state):
+                for p in get_safe_pairs() or []:
+                    symbols = [p["token0"]["symbol"], p["token1"]["symbol"]]
+                    if "USDC" not in symbols:
+                        continue
+    
+                    symbol = symbols[0] if symbols[1] == "USDC" else symbols[1]
+                    if any(ap['asset'] == symbol for ap in get_active_positions()):
+                        continue
+    
                     df_ltf = load_ohlcv(symbol, "5m")
-                    if entry_ok(df_ltf):
+                    if df_ltf is None:
+                        continue
+    
+                    df_htf = load_ohlcv(symbol, "1h")
+    
+                    ltf_ok = entry_ok(df_ltf)
+                    htf_pass = df_htf is not None and htf_ok(df_htf)
+    
+                    # Aggressive entry: LTF can override HTF
+                    if ltf_ok and (htf_pass or compute_rsi(df_ltf) < 42):
                         usdc_amount = calculate_trade_size()
                         if usdc_amount < 1:
                             continue
-
-                        log_activity(f"🟢 BUY {symbol} | ${usdc_amount:.2f}")
+    
+                        log_activity(
+                            f"🟢 BUY {symbol} | "
+                            f"LTF_RSI={compute_rsi(df_ltf):.1f} | "
+                            f"HTF={'OK' if htf_pass else 'OVERRIDE'} | "
+                            f"${usdc_amount:.2f}"
+                        )
+    
                         tx = client.buy_with_usdc(
                             TOKEN_BY_SYMBOL[symbol],
                             usdc_amount
                         )
+    
                         record_trade(
                             f"{symbol}/USDC",
                             "BUY",
@@ -284,8 +298,14 @@ while True:
                             get_price(symbol),
                             tx
                         )
-                        sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
+    
+                        sync_balances(
+                            client.w3,
+                            WALLET_ADDRESS,
+                            TOKENS_TO_TRACK
+                        )
                         time.sleep(10)
+
 
         log_activity(f"😴 Cycle complete. Sleeping {LOOP_SLEEP}s.")
         time.sleep(LOOP_SLEEP)
