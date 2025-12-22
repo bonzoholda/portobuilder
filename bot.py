@@ -53,6 +53,15 @@ client = UniswapV3Client()
 
 print("✅ Bot started")
 
+# FORCE AN IMMEDIATE SYNC ON STARTUP
+print("🔄 Performing initial balance sync...")
+try:
+    # Ensure you use the variables defined in your bot.py
+    sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
+    print("✅ Initial sync complete")
+except Exception as e:
+    print(f"❌ Initial sync failed: {e}")
+
 # ================= HELPERS =================
 
 def today_timestamp():
