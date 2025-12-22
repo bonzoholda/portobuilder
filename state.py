@@ -86,6 +86,8 @@ def record_trade(
     equity_before=None,
     equity_after=None
 ):
+    if tx is not None and not isinstance(tx, (str, int)):
+        tx = str(tx)
     conn = sqlite3.connect(DB_FILE, timeout=10)
     c = conn.cursor()
 
