@@ -68,5 +68,5 @@ def index():
 if __name__ == "__main__":
     # 3. Fix: Railway provides the PORT environment variable.
     # If it's not there, it defaults to 5000.
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
