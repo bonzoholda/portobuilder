@@ -11,6 +11,8 @@ from strategy import htf_ok, entry_ok
 from risk import load_state, save_state, can_trade
 from uniswap_v3 import UniswapV3Client
 from state import init_db, record_trade, set_meta
+init_db()
+
 from ohlcv import load_ohlcv
 from token_list import TOKEN_BY_SYMBOL
 
@@ -48,7 +50,7 @@ LOOP_SLEEP = 300                 # 5 minutes
 
 # ================= INIT ===================
 
-init_db()
+//init_db()
 client = UniswapV3Client()
 
 print("✅ Bot started")
