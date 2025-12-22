@@ -50,7 +50,7 @@ LOOP_SLEEP = 300                 # 5 minutes
 
 # ================= INIT ===================
 
-//init_db()
+# init_db()
 client = UniswapV3Client()
 
 print("✅ Bot started")
