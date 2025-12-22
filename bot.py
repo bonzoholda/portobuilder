@@ -60,6 +60,7 @@ LAST_TRADE_COOLDOWN = 1800
 MAX_DAILY_LOSS = -1.5
 LOOP_SLEEP = 300
 TRAILING_PERCENT = 0.01
+PORTFOLIO_TRAILING_PCT = 0.03  # 3%
 
 client = UniswapV3Client()
 log_activity("✅ Bot started with Tiered Exit Strategy (30/30/40)")
@@ -138,6 +139,19 @@ def update_position_state(symbol, column, value):
     conn.commit()
     conn.close()
 
+def get_portfolio_value():
+    conn = sqlite3.connect("trader.db")
+    c = conn.cursor()
+    c.execute("SELECT asset, amount, price FROM balances")
+    rows = c.fetchall()
+    conn.close()
+
+    total = 0
+    for asset, amount, price in rows:
+        total += amount * price
+    return total
+
+
 # ================= MAIN LOOP =================
 log_activity("🔄 Performing initial balance sync...")
 sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
@@ -160,6 +174,53 @@ while True:
             log_activity(f"🛑 Daily Loss Limit Hit: {daily_pnl:.2f}. Sleeping 1h.")
             time.sleep(3600)
             continue
+
+        # ================= PORTFOLIO TRAILING STOP =================
+        portfolio_value = get_portfolio_value()
+        
+        ath = get_meta("portfolio_ath", 0)
+        if portfolio_value > ath:
+            set_meta("portfolio_ath", portfolio_value)
+            log_activity(f"📈 New Portfolio ATH: ${portfolio_value:.2f}")
+        else:
+            drawdown = (ath - portfolio_value) / ath if ath > 0 else 0
+            if drawdown >= PORTFOLIO_TRAILING_PCT:
+                log_activity(
+                    f"🚨 PORTFOLIO TRAILING STOP HIT "
+                    f"({drawdown*100:.2f}% drawdown)"
+                )
+        
+                # 🔥 CLOSE EVERYTHING
+                active_pos = get_active_positions()
+                for pos in active_pos:
+                    symbol = pos['asset']
+                    token_addr = TOKEN_BY_SYMBOL.get(symbol)
+                    amount = pos['amount']
+                    price = get_price(symbol)
+        
+                    try:
+                        tx = client.sell_for_usdc(token_addr, amount)
+                        record_trade(
+                            f"{symbol}/USDC",
+                            "SELL",
+                            0,
+                            amount * price,
+                            price,
+                            tx
+                        )
+                    except Exception as e:
+                        log_activity(f"⚠️ Emergency sell failed {symbol}: {e}")
+        
+                sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
+        
+                # 🔒 RESET ATH TO CURRENT (LOCK PROFITS)
+                set_meta("portfolio_ath", get_portfolio_value())
+        
+                log_activity("🔒 Portfolio locked after trailing stop")
+                time.sleep(600)
+                continue
+
+        
 
         # --- EXITS ---
         active_pos = get_active_positions()
