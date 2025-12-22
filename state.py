@@ -4,10 +4,11 @@ import time
 import os
 
 # Define the absolute path
-if os.path.isdir("/app/data"):
-    DB_FILE = "/app/data/trader.db"
-else:
-    DB_FILE = "trader.db"
+# Simple and reliable for same-container setups
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB = os.path.join(BASE_DIR, "trader.db")
+
+DB_FILE = DB
 
 STATE_FILE = "state.json"
 
