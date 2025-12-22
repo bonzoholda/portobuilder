@@ -106,6 +106,12 @@ def update_position_state(symbol, column, value):
     conn.close()
 
 # ================= MAIN LOOP =================
+print("🔄 Performing initial balance sync...")
+try:
+    sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
+    print("✅ Initial sync complete")
+except Exception as e:
+    print(f"❌ Initial sync failed: {e}")
 
 while True:
     try:
