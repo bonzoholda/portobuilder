@@ -16,6 +16,7 @@ from token_list import TOKEN_BY_SYMBOL
 
 from state import set_balance
 from web3 import Web3
+from uniswap_abi import ERC20_ABI
 
 import sqlite3
 
@@ -32,6 +33,8 @@ init_db()
 client = UniswapV3Client()
 
 print("✅ Bot started")
+# Sync once immediately so dashboard isn't empty on restart
+sync_balances(client.w3, os.getenv("WALLET_ADDRESS"), TOKENS_TO_TRACK)
 
 # ================= HELPERS =================
 
@@ -54,14 +57,20 @@ def get_daily_pnl():
     return pnl
 
 def sync_balances(w3, wallet, tokens):
+    print("🔄 Syncing balances to dashboard...")
     for symbol, token_addr, decimals in tokens:
-        if token_addr == "MATIC":
-            bal = w3.eth.get_balance(wallet) / 1e18
-        else:
-            erc20 = w3.eth.contract(token_addr, abi=ERC20_ABI)
-            bal = erc20.functions.balanceOf(wallet).call() / (10 ** decimals)
+        try:
+            if token_addr == "MATIC":
+                bal = w3.eth.get_balance(wallet) / 1e18
+            else:
+                # Use checksum address for safety
+                token_addr = Web3.to_checksum_address(token_addr)
+                erc20 = w3.eth.contract(address=token_addr, abi=ERC20_ABI)
+                bal = erc20.functions.balanceOf(wallet).call() / (10 ** decimals)
 
-        set_balance(symbol, bal)
+            set_balance(symbol, bal)
+        except Exception as e:
+            print(f"⚠️ Could not sync {symbol}: {e}")
         
 # ================= MAIN LOOP =================
 
@@ -156,7 +165,16 @@ while True:
                 state.setdefault("last_trade", {})[symbol] = int(time.time())
                 save_state(state)
 
-                sync_balances()
+                # Create a list of tokens you want to track in the dashboard
+                # Format: (Symbol, Address, Decimals)
+                TOKENS_TO_TRACK = [
+                    ("MATIC", "MATIC", 18),
+                    ("USDC", "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", 6),
+                    ("WETH", "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", 18)
+                ]
+                
+                # Inside your loop, change the call to:
+                sync_balances(client.w3, os.getenv("WALLET_ADDRESS"), TOKENS_TO_TRACK)
 
                 time.sleep(random.randint(5, 25))
 
