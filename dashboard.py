@@ -78,6 +78,21 @@ def index():
         total_pnl=round(float(total), 4)
     )
 
+@app.route('/logs')
+def get_logs():
+    log_file = 'bot_activity.log'
+    if not os.path.exists(log_file):
+        return {"logs": ["No logs yet..."]}
+    
+    with open(log_file, 'r') as f:
+        # Read all lines and take the last 20
+        lines = f.readlines()
+        last_logs = [line.strip() for line in lines[-20:]]
+        # Reverse them so the newest is on top
+        last_logs.reverse() 
+        
+    return {"logs": last_logs}
+
 
 if __name__ == "__main__":
     # 3. Fix: Railway provides the PORT environment variable.
