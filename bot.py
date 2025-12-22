@@ -14,7 +14,7 @@ from pair_scanner import get_safe_pairs
 from strategy import htf_ok, entry_ok, exit_levels
 from risk import load_state, save_state, can_trade
 from uniswap_v3 import UniswapV3Client
-from state import init_db, record_trade, set_meta, set_balance
+from state import init_db, record_trade, set_meta, get_meta, set_balance
 from ohlcv import load_ohlcv
 from token_list import TOKEN_BY_SYMBOL
 
