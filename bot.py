@@ -111,7 +111,7 @@ def get_active_positions():
     conn = sqlite3.connect("trader.db")
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    c.execute("SELECT * FROM balances WHERE amount > 0.001 AND asset != 'USDC'")
+    c.execute("SELECT * FROM balances WHERE amount > 0.00001 AND asset != 'USDC' OR asset != 'MATIC'")
     rows = [dict(r) for r in c.fetchall()]
     conn.close()
     return rows
