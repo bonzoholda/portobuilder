@@ -4,14 +4,11 @@ import time
 import os
 
 # Define the absolute path
-if os.path.exists("/app/data"):
-    # This is the Railway Volume path
-    DB_PATH = "/app/data/trader.db"
+if os.path.isdir("/app/data"):
+    DB_FILE = "/app/data/trader.db"
 else:
-    # This is your local computer path
-    DB_PATH = "trader.db"
+    DB_FILE = "trader.db"
 
-DB_FILE = DB_PATH
 STATE_FILE = "state.json"
 
 
