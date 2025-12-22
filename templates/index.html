@@ -33,12 +33,14 @@
 <div class="card">
     <h3>Balances</h3>
     <table>
+        <tr><th>Asset</th><th>Amount</th></tr>
         {% for b in balances %}
         <tr>
             <td><strong>{{ b.asset }}</strong></td>
-            <td>{{ "%.6f"|format(b.amount) }}</td> </tr>
+            <td>{{ "%.6f"|format(b.amount) }}</td>
+        </tr>
         {% else %}
-        <tr><td colspan="2">No balances synced yet.</td></tr>
+        <tr><td colspan="2" style="color: gray;">Waiting for bot sync...</td></tr>
         {% endfor %}
     </table>
 </div>
