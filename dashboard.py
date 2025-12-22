@@ -31,6 +31,10 @@ def query(sql, params=()):
 
 @app.route("/")
 def index():
+    print(f"DEBUG: Dashboard is looking for DB at: {DB}") # Add this
+    if os.path.exists(DB):
+        print(f"DEBUG: File size is {os.path.getsize(DB)} bytes")
+    
     balances = query("SELECT * FROM balances")
     # --- ADD THIS LINE ---
     print(f"DEBUG: Found {len(balances)} rows in balances table.")
