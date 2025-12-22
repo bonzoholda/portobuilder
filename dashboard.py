@@ -5,13 +5,16 @@ import os
 
 
 app = Flask(__name__)
-# Define the absolute path
+# Change this in dashboard.py
+# If you are on Railway, the volume is at /app/data/
 if os.path.exists("/app/data"):
-    # This is the Railway Volume path
-    DB_PATH = "/app/data/trader.db"
+    DB = "/app/data/trader.db"
 else:
-    # This is your local computer path
-    DB_PATH = "trader.db"
+    # Fallback for your local computer
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    DB = os.path.join(BASE_DIR, "trader.db")
+
+print(f"DEBUG: System successfully set DB path to: {DB}")
 
 DB = DB_PATH
 
