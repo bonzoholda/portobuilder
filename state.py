@@ -76,15 +76,22 @@ def record_trade(pair, side, amount_in, amount_out, price, tx):
     conn.commit()
     conn.close()
 
-def set_balance(asset, amount):
-    print(f"💾 Saving to DB: {asset} = {amount}") # <--- ADD THIS
-    conn = sqlite3.connect(DB_FILE)
+def set_balance(asset, amount, price=0):
+    conn = sqlite3.connect(DB_FILE, timeout=10)
     c = conn.cursor()
-
+    
+    # 1. Safety check: Ensure the price column exists
+    try:
+        c.execute("ALTER TABLE balances ADD COLUMN price REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass # Column already exists
+    
+    # 2. Update the data
     c.execute("""
-    INSERT OR REPLACE INTO balances VALUES (?,?)
+        INSERT OR REPLACE INTO balances (asset, amount, price) 
+        VALUES (?, ?, ?)
     """, (asset, amount, price))
-
+    
     conn.commit()
     conn.close()
 
