@@ -13,7 +13,14 @@ from pair_scanner import get_safe_pairs
 from strategy import htf_ok, entry_ok, exit_levels
 from risk import load_state, can_trade
 from uniswap_v3 import UniswapV3Client
-from state import init_db, record_trade, set_meta, get_meta, set_balance
+from state import (
+    init_db,
+    record_trade,
+    set_meta,
+    get_meta,
+    set_balance,
+    snapshot_portfolio   # 👈 ADD THIS
+)
 from ohlcv import load_ohlcv
 from token_list import TOKEN_BY_SYMBOL
 
@@ -152,6 +159,16 @@ while True:
         # ✅ PROBE 1 — PORTFOLIO VALUE VISIBILITY
         portfolio_value = get_portfolio_value()
         log_activity(f"📊 Portfolio value = ${portfolio_value:.4f}")
+        
+        snapshot_portfolio(
+            realized_pnl=get_meta("realized_pnl", 0)
+        )
+        
+        log_activity(
+            f"📊 Baseline ${get_meta('portfolio_baseline', 0):.4f} | "
+            f"Current ${portfolio_value:.4f}"
+        )
+
 
         baseline = get_meta("portfolio_baseline", 0)
         current_value = portfolio_value
