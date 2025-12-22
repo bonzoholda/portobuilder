@@ -38,7 +38,8 @@ def init_db():
     c.execute("""
     CREATE TABLE IF NOT EXISTS balances (
         asset TEXT PRIMARY KEY,
-        amount REAL
+        amount REAL,
+        price REAL DEFAULT 0
     )
     """)
     
@@ -82,7 +83,7 @@ def set_balance(asset, amount):
 
     c.execute("""
     INSERT OR REPLACE INTO balances VALUES (?,?)
-    """, (asset, amount))
+    """, (asset, amount, price))
 
     conn.commit()
     conn.close()
