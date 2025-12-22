@@ -5,16 +5,14 @@ import os
 
 
 app = Flask(__name__)
-# Change this in dashboard.py
-# If you are on Railway, the volume is at /app/data/
-if os.path.exists("/app/data"):
+# FORCE THE VOLUME PATH
+if os.path.isdir("/app/data"):
     DB = "/app/data/trader.db"
 else:
-    # Fallback for your local computer
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    DB = os.path.join(BASE_DIR, "trader.db")
+    # Local development fallback
+    DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trader.db")
 
-print(f"DEBUG: System successfully set DB path to: {DB}")
+print(f"DEBUG: Final DB Path being used: {DB}")
 
 
 def query(sql, params=()):
