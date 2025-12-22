@@ -1,52 +1,36 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Portfolio Equity Curve</title>
+    <title>Portfolio Equity</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        body {
-            background:#0d1117;
-            color:#e6edf3;
-            font-family:Arial;
-            padding:20px;
-        }
-        canvas {
-            max-width: 100%;
-        }
-    </style>
 </head>
-<body>
+<body style="background:#0f1115;color:#eee;font-family:sans-serif">
 
-<h2>📈 Portfolio Equity Curve</h2>
-
-<canvas id="equityChart" height="100"></canvas>
+<h2>Portfolio Equity Curve</h2>
+<canvas id="chart" height="100"></canvas>
 
 <script>
-const ctx = document.getElementById('equityChart');
+    const data = {{ equity_data | tojson }};
+    const ctx = document.getElementById('chart');
 
-new Chart(ctx, {
-    type: 'line',
-    data: {
-        labels: {{ labels | safe }},
-        datasets: [{
-            label: 'Total Equity ($)',
-            data: {{ values | safe }},
-            borderColor: '#3fb950',
-            tension: 0.25,
-            fill: false
-        }]
-    },
-    options: {
-        responsive: true,
-        scales: {
-            y: {
-                ticks: {
-                    callback: v => '$' + v.toFixed(2)
-                }
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.map(d => d.time),
+            datasets: [{
+                label: 'Total Equity ($)',
+                data: data.map(d => d.equity),
+                borderWidth: 2,
+                tension: 0.25
+            }]
+        },
+        options: {
+            scales: {
+                x: { display: false },
+                y: { beginAtZero: false }
             }
         }
-    }
-});
+    });
 </script>
 
 </body>
