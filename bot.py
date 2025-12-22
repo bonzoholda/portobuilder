@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from pair_scanner import get_safe_pairs
-from strategy import htf_ok, entry_ok
+from strategy import htf_ok, entry_ok, exit_levels  # Added exit_levels
 from risk import load_state, save_state, can_trade
 from uniswap_v3 import UniswapV3Client
 from state import init_db, record_trade, set_meta, set_balance
@@ -30,7 +30,6 @@ DECIMALS = {
     "WBTC.e": 8
 }
 
-# Build the TOKENS_TO_TRACK list dynamically
 TOKENS_TO_TRACK = [
     ("MATIC", "MATIC", 18),
     ("USDC", USDC, 6)
@@ -42,9 +41,9 @@ for symbol, addr in TOKEN_BY_SYMBOL.items():
         TOKENS_TO_TRACK.append((symbol, addr, decimal))
 
 TRADE_USDC_AMOUNT = 2.4
-LAST_TRADE_COOLDOWN = 1800       # 30 minutes
-MAX_DAILY_LOSS = -1.5            # USDC
-LOOP_SLEEP = 300                 # 5 minutes
+LAST_TRADE_COOLDOWN = 1800
+MAX_DAILY_LOSS = -1.5
+LOOP_SLEEP = 300
 
 # ================= INIT ===================
 client = UniswapV3Client()
@@ -55,20 +54,14 @@ print("✅ Bot started")
 def get_price(symbol):
     if symbol == "USDC": return 1.0
     try:
-        # OKX uses 'SYMBOL-USDT' format
-        # We map MATIC and WETH to their tradeable pairs
-        mapping = {"WMATIC": "POL","MATIC": "POL", "WETH": "ETH", "WBTC": "BTC"}
+        mapping = {"WMATIC": "POL", "MATIC": "POL", "WETH": "ETH", "WBTC": "BTC"}
         ticker_symbol = mapping.get(symbol.upper(), symbol.upper())
-        
         url = f"https://www.okx.com/api/v5/market/ticker?instId={ticker_symbol}-USDT"
         res = requests.get(url, timeout=5)
         data = res.json()
-        
         if data.get('code') == '0' and data.get('data'):
             return float(data['data'][0]['last'])
-        else:
-            print(f"⚠️ OKX price missing for {symbol}: {data.get('msg')}")
-            return 0.0
+        return 0.0
     except Exception as e:
         print(f"⚠️ OKX API Error for {symbol}: {e}")
         return 0.0
@@ -94,25 +87,29 @@ def sync_balances(w3, wallet, tokens):
     print("🔄 Syncing balances to dashboard...")
     for symbol, token_addr, decimals in tokens:
         try:
-            # 1. Get Balance
             if token_addr == "MATIC":
                 bal = w3.eth.get_balance(wallet) / 1e18
             else:
                 erc20 = w3.eth.contract(address=Web3.to_checksum_address(token_addr), abi=ERC20_ABI)
                 bal = erc20.functions.balanceOf(wallet).call() / (10 ** decimals)
-            
-            # 2. Get Price
             price = get_price(symbol)
-
-            # 3. Save to DB with price
             set_balance(symbol, bal, price)
-            
         except Exception as e:
             print(f"⚠️ Error syncing {symbol}: {e}")
 
+def get_active_positions():
+    """Finds tokens we currently hold and their last buy price."""
+    conn = sqlite3.connect("trader.db")
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    # Find tokens where the last action was a BUY and we still have a balance
+    c.execute("SELECT asset, amount, price FROM balances WHERE amount > 0.01 AND asset != 'USDC'")
+    positions = c.fetchall()
+    conn.close()
+    return positions
+
 # ================= MAIN LOOP =================
 
-# FORCE AN IMMEDIATE SYNC ON STARTUP
 print("🔄 Performing initial balance sync...")
 try:
     sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
@@ -126,86 +123,88 @@ while True:
         daily_pnl = get_daily_pnl()
         set_meta("daily_pnl", daily_pnl)
 
-        # 🛑 Kill switch
         if daily_pnl <= MAX_DAILY_LOSS:
             print(f"🛑 Kill switch triggered: {daily_pnl:.2f} USDC")
             time.sleep(86400)
             continue
 
-        if not can_trade(state):
-            print("⚠️ Trading disabled by risk module")
-            time.sleep(600)
-            continue
+        # --- PART 1: MONITOR FOR EXITS ---
+        active_positions = get_active_positions()
+        for pos in active_positions:
+            symbol = pos['asset']
+            current_price = get_price(symbol)
+            entry_price = pos['price'] # We use the price saved in balances table
+            
+            if entry_price == 0: continue
 
-        pairs = get_safe_pairs()
-        if not isinstance(pairs, list):
-            print("⚠️ Pair scanner returned invalid data, skipping cycle")
-            time.sleep(LOOP_SLEEP)
-            continue
+            levels = exit_levels(entry_price)
+            
+            reason = ""
+            if current_price >= levels['tp2']: reason = "TP2 (+3%)"
+            elif current_price >= levels['tp1']: reason = "TP1 (+1.5%)"
+            elif current_price <= levels['sl']: reason = "SL (-1.5%)"
 
-        for p in pairs:
-            try:
-                if "token0" not in p or "token1" not in p:
-                    continue
+            if reason:
+                print(f"🔴 SELL {symbol} at {current_price} | Reason: {reason}")
+                token_addr = TOKEN_BY_SYMBOL.get(symbol)
+                if token_addr:
+                    # Execute Sell logic
+                    tx = client.sell_for_usdc(token_addr=token_addr, amount=pos['amount'])
+                    
+                    record_trade(
+                        pair=f"{symbol}/USDC",
+                        side="SELL",
+                        amount_in=0,
+                        amount_out=pos['amount'] * current_price,
+                        price=current_price,
+                        tx=tx
+                    )
+                    sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
 
-                symbols = [p["token0"].get("symbol"), p["token1"].get("symbol")]
-                if "USDC" not in symbols:
-                    continue
+        # --- PART 2: SCAN FOR NEW ENTRIES ---
+        if can_trade(state):
+            pairs = get_safe_pairs()
+            if isinstance(pairs, list):
+                for p in pairs:
+                    try:
+                        if "token0" not in p or "token1" not in p: continue
+                        symbols = [p["token0"].get("symbol"), p["token1"].get("symbol")]
+                        if "USDC" not in symbols: continue
 
-                symbol = symbols[0] if symbols[1] == "USDC" else symbols[1]
-                if symbol not in TOKEN_BY_SYMBOL:
-                    continue
-                
-                last_trade = state.get("last_trade", {}).get(symbol, 0)
-                if time.time() - last_trade < LAST_TRADE_COOLDOWN:
-                    continue
+                        symbol = symbols[0] if symbols[1] == "USDC" else symbols[1]
+                        if symbol not in TOKEN_BY_SYMBOL: continue
+                        
+                        # Don't buy if we already have a position
+                        if any(pos['asset'] == symbol for pos in active_positions): continue
 
-                # ---- Load OHLCV safely ----
-                df_htf = load_ohlcv(symbol, "4h")
-                df_ltf = load_ohlcv(symbol, "15m")
+                        last_trade = state.get("last_trade", {}).get(symbol, 0)
+                        if time.time() - last_trade < LAST_TRADE_COOLDOWN: continue
 
-                if df_htf is None or df_ltf is None or df_htf.empty or df_ltf.empty:
-                    continue
+                        df_htf = load_ohlcv(symbol, "4h")
+                        df_ltf = load_ohlcv(symbol, "15m")
 
-                print(f"Checking {symbol}")
-                if not htf_ok(df_htf):
-                    print(f"❌ HTF fail {symbol}")
-                    continue
+                        if df_htf is None or df_ltf is None or df_htf.empty or df_ltf.empty: continue
 
-                if not entry_ok(df_ltf):
-                    print(f"❌ Entry fail {symbol}")
-                    continue
-
-                token_addr = TOKEN_BY_SYMBOL[symbol]
-                print(f"🟢 BUY {symbol}")
-
-                tx = client.buy_with_usdc(
-                    token_addr=token_addr,
-                    usdc_amount=TRADE_USDC_AMOUNT
-                )
-
-                # Get price at moment of trade for recording
-                current_trade_price = get_price(symbol)
-
-                record_trade(
-                    pair=f"{symbol}/USDC",
-                    side="BUY",
-                    amount_in=TRADE_USDC_AMOUNT,
-                    amount_out=0,
-                    price=current_trade_price,
-                    tx=tx
-                )
-
-                state.setdefault("last_trade", {})[symbol] = int(time.time())
-                save_state(state)
-                
-                # Update balances immediately after trade
-                sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
-                time.sleep(random.randint(5, 25))
-
-            except Exception as pair_error:
-                print(f"⚠️ Pair skipped due to error: {pair_error}")
-                continue
+                        if htf_ok(df_htf) and entry_ok(df_ltf):
+                            token_addr = TOKEN_BY_SYMBOL[symbol]
+                            print(f"🟢 BUY {symbol}")
+                            tx = client.buy_with_usdc(token_addr=token_addr, usdc_amount=TRADE_USDC_AMOUNT)
+                            
+                            current_trade_price = get_price(symbol)
+                            record_trade(
+                                pair=f"{symbol}/USDC",
+                                side="BUY",
+                                amount_in=TRADE_USDC_AMOUNT,
+                                amount_out=0,
+                                price=current_trade_price,
+                                tx=tx
+                            )
+                            state.setdefault("last_trade", {})[symbol] = int(time.time())
+                            save_state(state)
+                            sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
+                            time.sleep(random.randint(5, 25))
+                    except Exception as pair_error:
+                        continue
 
         time.sleep(LOOP_SLEEP)
 
