@@ -17,10 +17,29 @@ from token_list import TOKEN_BY_SYMBOL
 from state import set_balance
 from web3 import Web3
 from uniswap_abi import ERC20_ABI
+from config import WALLET_ADDRESS, USDC # Assuming USDC is defined in config
 
 import sqlite3
 
 # ================= CONFIG =================
+# 1. Define Decimals manually for non-18 decimal tokens
+DECIMALS = {
+    "USDC": 6,
+    "WBTC": 8,
+    "WBTC.e": 8
+}
+
+# 2. Build the TOKENS_TO_TRACK list dynamically
+TOKENS_TO_TRACK = [
+    ("MATIC", "MATIC", 18),
+    ("USDC", USDC, 6)
+]
+
+for symbol, addr in TOKEN_BY_SYMBOL.items():
+    # Default to 18 decimals unless specified in our dictionary
+    decimal = DECIMALS.get(symbol, 18)
+    TOKENS_TO_TRACK.append((symbol, addr, decimal))
+
 
 TRADE_USDC_AMOUNT = 2.4
 LAST_TRADE_COOLDOWN = 1800       # 30 minutes
@@ -61,23 +80,26 @@ def sync_balances(w3, wallet, tokens):
             if token_addr == "MATIC":
                 bal = w3.eth.get_balance(wallet) / 1e18
             else:
-                # Use checksum address for safety
-                token_addr = Web3.to_checksum_address(token_addr)
-                erc20 = w3.eth.contract(address=token_addr, abi=ERC20_ABI)
-                bal = erc20.functions.balanceOf(wallet).call() / (10 ** decimals)
+                # Ensure address is checksummed for Web3.py
+                checksum_addr = Web3.to_checksum_address(token_addr)
+                contract = w3.eth.contract(address=checksum_addr, abi=ERC20_ABI)
+                raw_bal = contract.functions.balanceOf(wallet).call()
+                bal = raw_bal / (10 ** decimals)
 
+            # Push to trader.db via state.py
             set_balance(symbol, bal)
+            
         except Exception as e:
-            print(f"⚠️ Could not sync {symbol}: {e}")
+            print(f"⚠️ Error syncing {symbol}: {e}")
         
 # ================= MAIN LOOP =================
+
+# --- Before the while True loop ---
+sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
 
 while True:
     try:
         state = load_state()
-
-        # Sync once immediately so dashboard isn't empty on restart
-        sync_balances(client.w3, os.getenv("WALLET_ADDRESS"), TOKENS_TO_TRACK)
 
         daily_pnl = get_daily_pnl()
         set_meta("daily_pnl", daily_pnl)
@@ -165,17 +187,9 @@ while True:
 
                 state.setdefault("last_trade", {})[symbol] = int(time.time())
                 save_state(state)
-
-                # Create a list of tokens you want to track in the dashboard
-                # Format: (Symbol, Address, Decimals)
-                TOKENS_TO_TRACK = [
-                    ("MATIC", "MATIC", 18),
-                    ("USDC", "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", 6),
-                    ("WETH", "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", 18)
-                ]
-                
+               
                 # Inside your loop, change the call to:
-                sync_balances(client.w3, os.getenv("WALLET_ADDRESS"), TOKENS_TO_TRACK)
+                sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
 
                 time.sleep(random.randint(5, 25))
 
