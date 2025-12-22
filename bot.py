@@ -33,8 +33,6 @@ init_db()
 client = UniswapV3Client()
 
 print("✅ Bot started")
-# Sync once immediately so dashboard isn't empty on restart
-sync_balances(client.w3, os.getenv("WALLET_ADDRESS"), TOKENS_TO_TRACK)
 
 # ================= HELPERS =================
 
@@ -77,6 +75,9 @@ def sync_balances(w3, wallet, tokens):
 while True:
     try:
         state = load_state()
+
+        # Sync once immediately so dashboard isn't empty on restart
+        sync_balances(client.w3, os.getenv("WALLET_ADDRESS"), TOKENS_TO_TRACK)
 
         daily_pnl = get_daily_pnl()
         set_meta("daily_pnl", daily_pnl)
