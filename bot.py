@@ -55,10 +55,10 @@ for symbol, addr in TOKEN_BY_SYMBOL.items():
     if (symbol, addr, decimal) not in TOKENS_TO_TRACK:
         TOKENS_TO_TRACK.append((symbol, addr, decimal))
 
-LAST_TRADE_COOLDOWN = 1800
+LAST_TRADE_COOLDOWN = 600
 MAX_DAILY_LOSS = -1.5
-LOOP_SLEEP = 300
-TRAILING_PERCENT = 0.01
+LOOP_SLEEP = 120
+TRAILING_PERCENT = 0.005
 PORTFOLIO_TRAILING_PCT = 0.03  # 3%
 
 client = UniswapV3Client()
