@@ -3,14 +3,15 @@ import json
 import time
 import os
 
-# Create a robust path that works locally and on Railway
-if os.path.exists("/app/data"): # Railway Volume mount point
-    DB = "/app/data/trader.db"
+# Define the absolute path
+if os.path.exists("/app/data"):
+    # This is the Railway Volume path
+    DB_PATH = "/app/data/trader.db"
 else:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    DB = os.path.join(BASE_DIR, "trader.db")
+    # This is your local computer path
+    DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trader.db")
 
-DB_FILE = DB
+DB_FILE = DB_PATH
 STATE_FILE = "state.json"
 
 
