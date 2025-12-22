@@ -30,6 +30,12 @@ def query(sql, params=()):
 @app.route("/")
 def index():
     balances = query("SELECT * FROM balances")
+    # --- ADD THIS LINE ---
+    print(f"DEBUG: Found {len(balances)} rows in balances table.")
+    for b in balances:
+        print(f"DEBUG: {b['asset']} = {b['amount']}")
+    # ---------------------
+    
     trades = query("SELECT * FROM trades ORDER BY timestamp DESC LIMIT 20")
 
     today = int(time.time()) - 86400
