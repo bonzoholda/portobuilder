@@ -1,6 +1,5 @@
 import os
 import time
-import random
 import sqlite3
 import requests
 import logging
@@ -12,24 +11,25 @@ load_dotenv()
 
 from pair_scanner import get_safe_pairs
 from strategy import htf_ok, entry_ok, exit_levels
-from risk import load_state, save_state, can_trade
+from risk import load_state, can_trade
 from uniswap_v3 import UniswapV3Client
 from state import init_db, record_trade, set_meta, get_meta, set_balance
 from ohlcv import load_ohlcv
 from token_list import TOKEN_BY_SYMBOL
 
-# ✅ BASELINE IMPORTS (SAFE ADD)
+# ✅ BASELINE / PORTFOLIO (SINGLE SOURCE OF TRUTH)
 from baseline import (
     calculate_trade_size,
     check_and_update_baseline,
     get_or_init_baseline
 )
+from portfolio import get_portfolio_value
 
 from web3 import Web3
 from uniswap_abi import ERC20_ABI
 from config import WALLET_ADDRESS, USDC
 
-# ================= LOGGING CONFIG (100KB LIMIT) =================
+# ================= LOGGING =================
 log_file = 'bot_activity.log'
 file_handler = RotatingFileHandler(log_file, maxBytes=100 * 1024, backupCount=0)
 formatter = logging.Formatter('%(asctime)s - %(message)s', datefmt='%H:%M:%S')
@@ -43,10 +43,9 @@ def log_activity(msg):
     logger.info(msg)
     print(f"DEBUG: {msg}")
 
-# Ensure DB is ready
+# ================= INIT =================
 init_db()
 
-# ================= CONFIG =================
 DECIMALS = {"USDC": 6, "WBTC": 8, "WBTC.e": 8}
 TOKENS_TO_TRACK = [("MATIC", "MATIC", 18), ("USDC", USDC, 6)]
 
@@ -59,19 +58,20 @@ LAST_TRADE_COOLDOWN = 600
 MAX_DAILY_LOSS = -1.5
 LOOP_SLEEP = 120
 TRAILING_PERCENT = 0.005
-PORTFOLIO_TRAILING_PCT = 0.03  # 3%
+PORTFOLIO_TRAILING_PCT = 0.03
 
 client = UniswapV3Client()
 log_activity("✅ Bot started with Tiered Exit Strategy (30/30/40)")
 
-# ✅ BASELINE INIT (SAFE, ONE-TIME)
+# ================= BASELINE INIT =================
 baseline = get_or_init_baseline()
 log_activity(f"📊 Portfolio baseline initialized at ${baseline:.2f}")
 
 # ================= HELPERS =================
 
 def get_price(symbol):
-    if symbol == "USDC": return 1.0
+    if symbol == "USDC":
+        return 1.0
     try:
         mapping = {"WMATIC": "POL", "MATIC": "POL", "WETH": "ETH", "WBTC": "BTC"}
         ticker_symbol = mapping.get(symbol.upper(), symbol.upper())
@@ -80,9 +80,9 @@ def get_price(symbol):
         data = res.json()
         if data.get('code') == '0' and data.get('data'):
             return float(data['data'][0]['last'])
-        return 0.0
     except:
-        return 0.0
+        pass
+    return 0.0
 
 def today_timestamp():
     return int(datetime.now(timezone.utc).replace(
@@ -113,6 +113,7 @@ def sync_balances(w3, wallet, tokens):
                     abi=ERC20_ABI
                 )
                 bal = erc20.functions.balanceOf(wallet).call() / (10 ** decimals)
+
             price = get_price(symbol)
             set_balance(symbol, bal, price)
         except Exception as e:
@@ -138,183 +139,73 @@ def update_position_state(symbol, column, value):
     conn.commit()
     conn.close()
 
-def get_portfolio_value():
-    conn = sqlite3.connect("trader.db")
-    c = conn.cursor()
-    c.execute("SELECT asset, amount, price FROM balances")
-    rows = c.fetchall()
-    conn.close()
-
-    total = 0
-    for asset, amount, price in rows:
-        total += amount * price
-    return total
-
-# ================= DYNAMIC SIZING ENGINE =================
-
-def clamp(val, min_v, max_v):
-    return max(min_v, min(val, max_v))
-
-
-def get_portfolio_value():
-    conn = sqlite3.connect("trader.db")
-    c = conn.cursor()
-    c.execute("SELECT COALESCE(SUM(amount * price), 0) FROM balances")
-    val = c.fetchone()[0]
-    conn.close()
-    return val
-
-
-def get_portfolio_health_multiplier():
-    baseline = load_state().get("baseline", 0)
-    if baseline <= 0:
-        return 1.0
-
-    current = get_portfolio_value()
-    growth = (current - baseline) / baseline
-
-    if growth <= -0.015: return 0.7
-    if growth <= 0.0:    return 0.85
-    if growth <= 0.005:  return 1.0
-    if growth <= 0.02:   return 1.15
-    return 1.3
-
-
-def get_momentum_multiplier(N=10):
-    conn = sqlite3.connect("trader.db")
-    c = conn.cursor()
-    c.execute("""
-        SELECT side, amount_out - amount_in
-        FROM trades
-        ORDER BY timestamp DESC
-        LIMIT ?
-    """, (N,))
-    rows = c.fetchall()
-    conn.close()
-
-    if not rows:
-        return 1.0
-
-    wins = sum(1 for _, pnl in rows if pnl > 0)
-    losses = sum(1 for _, pnl in rows if pnl < 0)
-    momentum = (wins - losses) / N
-
-    if momentum <= -0.4: return 0.8
-    if momentum <= 0.0:  return 0.9
-    if momentum <= 0.4:  return 1.1
-    return 1.2
-
-
-def get_volatility_multiplier(df_htf):
-    if df_htf is None or len(df_htf) < 20:
-        return 1.0
-
-    df = df_htf.copy()
-    df["range_pct"] = (df["high"] - df["low"]) / df["close"]
-    vol = df["range_pct"].rolling(20).mean().iloc[-1]
-
-    if vol > 0.08: return 0.7
-    if vol > 0.05: return 0.85
-    if vol < 0.025: return 1.1
-    return 1.0
-
-
-def compute_position_size(df_htf):
-    base = BASE_POSITION_PCT
-    h = get_portfolio_health_multiplier()
-    m = get_momentum_multiplier()
-    v = get_volatility_multiplier(df_htf)
-
-    final_pct = clamp(base * h * m * v,
-                      MIN_POSITION_PCT,
-                      MAX_POSITION_PCT)
-
-    portfolio_usd = get_portfolio_value()
-    usdc_size = portfolio_usd * final_pct
-
-    log_activity(
-        f"📐 Sizing → base:{base:.2f} "
-        f"h:{h:.2f} m:{m:.2f} v:{v:.2f} "
-        f"= {final_pct:.2%} (${usdc_size:.2f})"
-    )
-
-    return usdc_size
-
-
-
-# ================= MAIN LOOP =================
+# ================= START =================
 log_activity("🔄 Performing initial balance sync...")
 sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
 log_activity("✅ Initial sync complete")
 
+# ================= MAIN LOOP =================
 while True:
     try:
         log_activity("🔍 --- Starting New Scan Cycle ---")
+
+        # ✅ PROBE 1 — PORTFOLIO VALUE VISIBILITY
+        portfolio_value = get_portfolio_value()
+        log_activity(f"📊 Portfolio value = ${portfolio_value:.4f}")
+
         state = load_state()
         daily_pnl = get_daily_pnl()
         set_meta("daily_pnl", daily_pnl)
 
-        # ✅ BASELINE LOCK CHECK
+        # 🔒 BASELINE CHECK
         locked, old_base, new_base = check_and_update_baseline()
         if locked:
             log_activity(f"🔒 Baseline locked: ${old_base:.2f} → ${new_base:.2f}")
 
-        # 🛑 Kill switch
+        # 🛑 DAILY LOSS KILL
         if daily_pnl <= MAX_DAILY_LOSS:
             log_activity(f"🛑 Daily Loss Limit Hit: {daily_pnl:.2f}. Sleeping 1h.")
             time.sleep(3600)
             continue
 
-        # ================= PORTFOLIO TRAILING STOP =================
-        portfolio_value = get_portfolio_value()
-        
+        # ================= PORTFOLIO TRAILING =================
         ath = get_meta("portfolio_ath", 0)
         if portfolio_value > ath:
             set_meta("portfolio_ath", portfolio_value)
             log_activity(f"📈 New Portfolio ATH: ${portfolio_value:.2f}")
         else:
-            drawdown = (ath - portfolio_value) / ath if ath > 0 else 0
-            if drawdown >= PORTFOLIO_TRAILING_PCT:
-                log_activity(
-                    f"🚨 PORTFOLIO TRAILING STOP HIT "
-                    f"({drawdown*100:.2f}% drawdown)"
-                )
-        
-                # 🔥 CLOSE EVERYTHING
-                active_pos = get_active_positions()
-                for pos in active_pos:
-                    symbol = pos['asset']
-                    token_addr = TOKEN_BY_SYMBOL.get(symbol)
-                    amount = pos['amount']
-                    price = get_price(symbol)
-        
-                    try:
-                        tx = client.sell_for_usdc(token_addr, amount)
-                        record_trade(
-                            f"{symbol}/USDC",
-                            "SELL",
-                            0,
-                            amount * price,
-                            price,
-                            tx
-                        )
-                    except Exception as e:
-                        log_activity(f"⚠️ Emergency sell failed {symbol}: {e}")
-        
-                sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
-        
-                # 🔒 RESET ATH TO CURRENT (LOCK PROFITS)
-                set_meta("portfolio_ath", get_portfolio_value())
-        
-                log_activity("🔒 Portfolio locked after trailing stop")
-                time.sleep(600)
-                continue
+            if ath > 0:
+                drawdown = (ath - portfolio_value) / ath
+                if drawdown >= PORTFOLIO_TRAILING_PCT:
+                    log_activity(
+                        f"🚨 PORTFOLIO TRAILING STOP HIT ({drawdown*100:.2f}%)"
+                    )
 
-        
+                    for pos in get_active_positions():
+                        symbol = pos['asset']
+                        try:
+                            tx = client.sell_for_usdc(
+                                TOKEN_BY_SYMBOL[symbol],
+                                pos['amount']
+                            )
+                            record_trade(
+                                f"{symbol}/USDC",
+                                "SELL",
+                                0,
+                                pos['amount'] * get_price(symbol),
+                                get_price(symbol),
+                                tx
+                            )
+                        except Exception as e:
+                            log_activity(f"⚠️ Emergency sell failed {symbol}: {e}")
 
-        # --- EXITS ---
-        active_pos = get_active_positions()
-        for pos in active_pos:
+                    sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
+                    set_meta("portfolio_ath", get_portfolio_value())
+                    time.sleep(600)
+                    continue
+
+        # ================= EXITS =================
+        for pos in get_active_positions():
             symbol = pos['asset']
             cur_price = get_price(symbol)
             entry_price = pos['price']
@@ -322,52 +213,51 @@ while True:
                 continue
 
             levels = exit_levels(entry_price)
-            token_addr = TOKEN_BY_SYMBOL.get(symbol)
+            token_addr = TOKEN_BY_SYMBOL[symbol]
 
             if cur_price > pos.get('ath', 0):
                 update_position_state(symbol, "ath", cur_price)
 
             if cur_price <= levels['sl']:
                 tx = client.sell_for_usdc(token_addr, pos['amount'])
-                record_trade(f"{symbol}/USDC", "SELL", 0, pos['amount']*cur_price, cur_price, tx)
+                record_trade(
+                    f"{symbol}/USDC",
+                    "SELL",
+                    0,
+                    pos['amount'] * cur_price,
+                    cur_price,
+                    tx
+                )
                 sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
-                continue
 
-        # --- ENTRIES ---
+        # ================= ENTRIES =================
         if can_trade(state):
-            pairs = get_safe_pairs()
-            for p in pairs or []:
+            for p in get_safe_pairs() or []:
                 symbols = [p["token0"]["symbol"], p["token1"]["symbol"]]
                 if "USDC" not in symbols:
                     continue
+
                 symbol = symbols[0] if symbols[1] == "USDC" else symbols[1]
-                if any(ap['asset'] == symbol for ap in active_pos):
+                if any(ap['asset'] == symbol for ap in get_active_positions()):
                     continue
 
                 df_htf = load_ohlcv(symbol, "1h")
                 if df_htf is not None and htf_ok(df_htf):
                     df_ltf = load_ohlcv(symbol, "5m")
                     if entry_ok(df_ltf):
-                        trade_size = calculate_trade_size()
-                        if trade_size < 1:
-                            trade_size = TRADE_USDC_AMOUNT
-
-                        log_activity(f"🟢 BUY {symbol} | Size ${trade_size:.2f}")
-                        usdc_amount = compute_position_size(df_htf)
-                        
+                        usdc_amount = calculate_trade_size()
                         if usdc_amount < 1:
-                            log_activity(f"⚠️ Position size too small for {symbol}, skipping.")
                             continue
-                        
-                        tx = client.buy_with_usdc(
-                            token_addr=TOKEN_BY_SYMBOL[symbol],
-                            usdc_amount=usdc_amount
-                        )
 
+                        log_activity(f"🟢 BUY {symbol} | ${usdc_amount:.2f}")
+                        tx = client.buy_with_usdc(
+                            TOKEN_BY_SYMBOL[symbol],
+                            usdc_amount
+                        )
                         record_trade(
                             f"{symbol}/USDC",
                             "BUY",
-                            trade_size,
+                            usdc_amount,
                             0,
                             get_price(symbol),
                             tx
