@@ -55,30 +55,22 @@ print("✅ Bot started")
 def get_price(symbol):
     if symbol == "USDC": return 1.0
     try:
-        # Improved mapping to CoinGecko IDs
-        mapping = {
-            "MATIC": "matic-network", 
-            "WMATIC": "matic-network",
-            "WETH": "weth", 
-            "ETH": "ethereum",
-            "WBTC": "wrapped-bitcoin",
-            "LINK": "chainlink",
-            "UNI": "uniswap"
-        }
-        coin_id = mapping.get(symbol.upper(), symbol.lower())
-        url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd"
+        # OKX uses 'SYMBOL-USDT' format
+        # We map MATIC and WETH to their tradeable pairs
+        mapping = {"WMATIC": "MATIC", "WETH": "ETH", "WBTC": "BTC"}
+        ticker_symbol = mapping.get(symbol.upper(), symbol.upper())
         
-        res = requests.get(url, timeout=10)
+        url = f"https://www.okx.com/api/v5/market/ticker?instId={ticker_symbol}-USDT"
+        res = requests.get(url, timeout=5)
         data = res.json()
         
-        # Safely extract the price
-        if coin_id in data and 'usd' in data[coin_id]:
-            return float(data[coin_id]['usd'])
+        if data.get('code') == '0' and data.get('data'):
+            return float(data['data'][0]['last'])
         else:
-            print(f"⚠️ Price data missing for {coin_id}: {data}")
+            print(f"⚠️ OKX price missing for {symbol}: {data.get('msg')}")
             return 0.0
     except Exception as e:
-        print(f"⚠️ Price fetch error for {symbol}: {e}")
+        print(f"⚠️ OKX API Error for {symbol}: {e}")
         return 0.0
 
 def today_timestamp():
