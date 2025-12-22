@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Portfolio Equity Curve</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background:#0d1117;
+            color:#e6edf3;
+            font-family:Arial;
+            padding:20px;
+        }
+        canvas {
+            max-width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+<h2>📈 Portfolio Equity Curve</h2>
+
+<canvas id="equityChart" height="100"></canvas>
+
+<script>
+const ctx = document.getElementById('equityChart');
+
+new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: {{ labels | safe }},
+        datasets: [{
+            label: 'Total Equity ($)',
+            data: {{ values | safe }},
+            borderColor: '#3fb950',
+            tension: 0.25,
+            fill: false
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: {
+                ticks: {
+                    callback: v => '$' + v.toFixed(2)
+                }
+            }
+        }
+    }
+});
+</script>
+
+</body>
+</html>
