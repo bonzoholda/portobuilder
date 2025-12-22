@@ -240,3 +240,37 @@ def load_state():
 def save_state(state):
     with open(STATE_FILE, "w") as f:
         json.dump(state, f)
+
+
+# ================= PORTFOLIO META HELPERS =================
+
+def get_portfolio_baseline():
+    return get_meta("portfolio_baseline", 0)
+
+
+def set_portfolio_baseline(value):
+    set_meta("portfolio_baseline", value)
+
+
+def get_portfolio_peak():
+    return get_meta("portfolio_peak", 0)
+
+
+def set_portfolio_peak(value):
+    set_meta("portfolio_peak", value)
+
+
+def get_daily_start_value():
+    return get_meta("daily_start_value", 0)
+
+
+def set_daily_start_value(value):
+    set_meta("daily_start_value", value)
+
+
+def get_last_growth_lock_ts():
+    return get_meta("last_growth_lock_ts", 0)
+
+
+def set_last_growth_lock_ts(ts):
+    set_meta("last_growth_lock_ts", ts)
