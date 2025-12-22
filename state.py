@@ -75,6 +75,7 @@ def record_trade(pair, side, amount_in, amount_out, price, tx):
     conn.close()
 
 def set_balance(asset, amount):
+    print(f"💾 Saving to DB: {asset} = {amount}") # <--- ADD THIS
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
 
