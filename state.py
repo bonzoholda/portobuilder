@@ -17,6 +17,8 @@ STATE_FILE = "state.json"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
+    # This is the magic line for multi-process access
+    conn.execute("PRAGMA journal_mode=WAL;")
     c = conn.cursor()
 
     # ---- Trades table ----
