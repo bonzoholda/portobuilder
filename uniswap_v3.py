@@ -139,5 +139,5 @@ class UniswapV3Client:
     def buy_with_usdc(self, token, usdc_amount):
         return self.swap_exact_input(USDC, token, usdc_amount)
 
-    def sell_to_usdc(self, token, token_amount):
+    def sell_for_usdc(self, token, token_amount):
         return self.swap_exact_input(token, USDC, token_amount)
