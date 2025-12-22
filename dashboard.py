@@ -11,8 +11,10 @@ DB = os.path.join(BASE_DIR, "trader.db")
 
 
 def query(sql, params=()):
-    # Add check to see if DB exists to prevent crashing
+    # DEBUG: This will print in your Railway logs so we can see the truth
+    print(f"🔍 Dashboard attempting to read: {DB}")
     if not os.path.exists(DB):
+        print("❌ DATABASE FILE NOT FOUND!")
         return []
     
     conn = sqlite3.connect(DB)
