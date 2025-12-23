@@ -26,9 +26,9 @@
         .green { color: #3fb950; }
         .red { color: #f85149; }
     </style>
-    <!-- Chart.js and time adapter -->
+    <!-- Chart.js and adapter -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
 </head>
 <body>
 
@@ -40,68 +40,19 @@
 <script>
 function fetchLogs() {
     fetch('/dashboard/logs')
-        .then(response => response.json())
+        .then(r => r.json())
         .then(data => {
             const container = document.getElementById('log-container');
-            container.innerHTML = data.logs.map(log => `<div>${log}</div>`).join('');
+            container.innerHTML = data.logs.map(l => `<div>${l}</div>`).join('');
         });
 }
-
-// Refresh logs every 5 seconds
 setInterval(fetchLogs, 5000);
-fetchLogs(); // Initial call
+fetchLogs();
 </script>
-
-<div class="card">
-    <h3>Portfolio Summary</h3>
-    <h1 style="color: #3fb950; margin: 0;">${{ total_portfolio }}</h1>
-    <p style="color: #8b949e; margin-top: 5px;">Total Estimated Value (USD)</p>
-    
-    <hr style="border: 0.1px solid #30363d; margin: 15px 0;">
-
-    <table>
-        <tr>
-            <th>Asset</th>
-            <th>Amount</th>
-            <th>Value (USD)</th>
-        </tr>
-        {% for b in balances %}
-        <tr>
-            <td><strong>{{ b.asset }}</strong></td>
-            <td>{{ "%.6f"|format(b.amount) }}</td>
-            <td class="green">${{ "%.2f"|format(b.usd_value) }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-</div>
 
 <div class="card">
   <h3>📈 Portfolio Growth</h3>
   <canvas id="portfolioChart"></canvas>
-</div>
-
-<div class="card">
-    <h3>PnL</h3>
-    <p>Daily: <span class="{{ 'green' if daily_pnl >= 0 else 'red' }}">{{ daily_pnl }}</span></p>
-    <p>Total: <span class="{{ 'green' if total_pnl >= 0 else 'red' }}">{{ total_pnl }}</span></p>
-</div>
-
-<div class="card">
-    <h3>Recent Trades</h3>
-    <table>
-        <tr><th>Pair</th><th>Side</th><th>In</th><th>Out</th><th>Tx</th></tr>
-        {% for t in trades %}
-        <tr>
-            <td>{{ t.pair }}</td>
-            <td class="{{ 'green' if t.side == 'BUY' else 'red' }}">{{ t.side }}</td>
-            <td>{{ t.amount_in }}</td>
-            <td>{{ t.amount_out }}</td>
-            <td><a href="https://polygonscan.com/tx/{{ t.tx }}" target="_blank" style="color: #58a6ff;">{{ t.tx[:10] }}...</a></td>
-        </tr>
-        {% else %}
-        <tr><td colspan="5">No trades recorded.</td></tr>
-        {% endfor %}
-    </table>
 </div>
 
 <script>
@@ -109,9 +60,9 @@ async function loadPortfolioChart() {
     const res = await fetch("/api/portfolio/history");
     const data = await res.json();
 
-    // Map data for Chart.js
+    // Convert to Chart.js format
     const chartData = data.map(d => ({
-        x: new Date(d.time),  // convert ISO string to Date
+        x: new Date(d.time),  // ISO string -> Date
         y: d.equity
     }));
 
@@ -124,19 +75,21 @@ async function loadPortfolioChart() {
     }
 
     window.portfolioChart = new Chart(ctx, {
-        type: "line",
+        type: 'line',
         data: {
             datasets: [{
                 label: 'Portfolio Equity',
                 data: chartData,
                 borderColor: '#3fb950',
-                backgroundColor: 'rgba(63, 185, 80, 0.2)',
+                backgroundColor: 'rgba(63,185,80,0.2)',
                 fill: true,
                 tension: 0.35,
-                pointRadius: 2
+                pointRadius: 3,
+                pointBackgroundColor: '#3fb950'
             }]
         },
         options: {
+            responsive: true,
             plugins: { legend: { display: false } },
             scales: {
                 x: {
@@ -158,7 +111,6 @@ async function loadPortfolioChart() {
     });
 }
 
-// Initial load and refresh every 2 minutes
 loadPortfolioChart();
 setInterval(loadPortfolioChart, 120000);
 </script>
