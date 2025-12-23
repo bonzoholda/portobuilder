@@ -1,34 +1,28 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from equity_data import load_equity
+import json
+from pathlib import Path
+
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
 
-@app.get("/", response_class=HTMLResponse)
-def dashboard(request: Request):
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "balances": [],
-            "total_portfolio": 0,
-            "daily_pnl": 0,
-            "total_pnl": 0,
-            "trades": []
-        }
-    )
+SNAPSHOT_FILE = Path("portfolio_snapshots.json")
 
+@app.route("/api/portfolio/history")
+def portfolio_history():
+    if not SNAPSHOT_FILE.exists():
+        return []
 
-@app.get("/equity", response_class=HTMLResponse)
-def equity_page(request: Request):
-    data = load_equity()
-    return templates.TemplateResponse(
-        "equity.html",
+    data = json.loads(SNAPSHOT_FILE.read_text())
+
+    return [
         {
-            "request": request,
-            "equity_data": data
+            "time": d["ts"],
+            "equity": d["value"],
+            "type": d["type"]
         }
-    )
+        for d in data
+    ]
