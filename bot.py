@@ -276,6 +276,8 @@ while True:
                 symbols = [p["token0"]["symbol"], p["token1"]["symbol"]]
                 if "USDC" not in symbols: continue
                 symbol = symbols[0] if symbols[1] == "USDC" else symbols[1]
+                log_activity(f"Scanning ... {symbol}")
+                time.sleep(3)
                 
                 if symbol in active_assets: continue
                 
@@ -287,6 +289,7 @@ while True:
                 loss = (-delta.clip(upper=0)).rolling(14).mean()
                 rsi = 100 - (100 / (1 + (gain / loss)))
                 rsi_val = rsi.iloc[-1]
+                log_activity(f"{symbol} | rsi {rsi_val}")
                 
                 if rsi_val < 40 and df["close"].iloc[-1] > df["close"].iloc[-2]:
                     usdc_amount = calculate_trade_size()
