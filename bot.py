@@ -103,14 +103,15 @@ def today_timestamp():
 def get_daily_pnl():
     conn = sqlite3.connect("trader.db")
     c = conn.cursor()
+    # We sum the net result of all trades today
     c.execute("""
         SELECT COALESCE(SUM(amount_out - amount_in), 0)
         FROM trades
         WHERE timestamp >= ?
     """, (today_timestamp(),))
-    pnl = c.fetchone()[0]
+    pnl_dollars = c.fetchone()[0]
     conn.close()
-    return pnl
+    return pnl_dollars
 
 def sync_balances(w3, wallet, tokens):
     log_activity("🔄 Syncing wallet balances...")
@@ -220,16 +221,27 @@ while True:
         visualize_portfolio(baseline, portfolio_value)
 
         state = load_state()
-        daily_pnl = get_daily_pnl()
-        set_meta("daily_pnl", daily_pnl)
+        # ================= RISK MANAGEMENT =================
+        daily_pnl_dollars = get_daily_pnl()
+        set_meta("daily_pnl", daily_pnl_dollars)
+        
+        # Calculate % change based on the baseline
+        baseline = get_meta("portfolio_baseline", 1) # Avoid division by zero
+        pnl_percentage = (daily_pnl_dollars / baseline) * 100
 
-        locked, old_base, new_base = check_and_update_baseline()
-        if locked:
-            log_activity(f"🔒 Baseline locked: ${old_base:.2f} → ${new_base:.2f}")
+        log_activity(f"📈 Daily PnL: ${daily_pnl_dollars:.2f} ({pnl_percentage:.2f}%)")
 
-        if daily_pnl <= MAX_DAILY_LOSS:
-            log_activity(f"🛑 Daily Loss Limit Hit: {daily_pnl:.2f}. Sleeping 1h.")
-            time.sleep(3600)
+        # Compare percentage to the limit
+        if pnl_percentage <= MAX_DAILY_LOSS:
+            log_activity(f"🛑 Daily Loss Limit Hit ({pnl_percentage:.2f}%). "
+                         f"Limit is {MAX_DAILY_LOSS}%. Sleeping until tomorrow.")
+            
+            # Calculate seconds until UTC midnight to avoid checking every hour uselessly
+            now = datetime.now(timezone.utc)
+            tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            sleep_seconds = (tomorrow - now).total_seconds()
+            
+            time.sleep(min(sleep_seconds, 3600)) # Sleep max 1hr or until midnight
             continue
 
         # ================= PORTFOLIO TRAILING =================
