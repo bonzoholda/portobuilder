@@ -26,29 +26,32 @@
         .green { color: #3fb950; }
         .red { color: #f85149; }
     </style>
+    <!-- Chart.js and time adapter -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 </head>
 <body>
 
 <h2>📊 Polygon Uniswap Bot</h2>
 
 <div id="log-container" style="background:#000; color:#0f0; padding:15px; font-family:monospace; height:100px; overflow-y:auto; border-radius:5px; font-size: 0.85rem;">
-    </div>
+</div>
 
 <script>
-    function fetchLogs() {
-        fetch('/dashboard/logs')
-            .then(response => response.json())
-            .then(data => {
-                const container = document.getElementById('log-container');
-                container.innerHTML = data.logs.map(log => `<div>${log}</div>`).join('');
-            });
-    }
+function fetchLogs() {
+    fetch('/dashboard/logs')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('log-container');
+            container.innerHTML = data.logs.map(log => `<div>${log}</div>`).join('');
+        });
+}
 
-    // Refresh logs every 5 seconds
-    setInterval(fetchLogs, 5000);
-    fetchLogs(); // Initial call
+// Refresh logs every 5 seconds
+setInterval(fetchLogs, 5000);
+fetchLogs(); // Initial call
 </script>
-    
+
 <div class="card">
     <h3>Portfolio Summary</h3>
     <h1 style="color: #3fb950; margin: 0;">${{ total_portfolio }}</h1>
@@ -77,8 +80,6 @@
   <canvas id="portfolioChart"></canvas>
 </div>
 
-    
-    
 <div class="card">
     <h3>PnL</h3>
     <p>Daily: <span class="{{ 'green' if daily_pnl >= 0 else 'red' }}">{{ daily_pnl }}</span></p>
@@ -103,63 +104,64 @@
     </table>
 </div>
 
-</body>
-
 <script>
 async function loadPortfolioChart() {
-  const res = await fetch("/api/portfolio/history");
-  const data = await res.json();
+    const res = await fetch("/api/portfolio/history");
+    const data = await res.json();
 
-  const initial = data.find(d => d.type === "initial");
-  const points = data.filter(d => d.type === "point");
+    // Map data for Chart.js
+    const chartData = data.map(d => ({
+        x: new Date(d.time),  // convert ISO string to Date
+        y: d.equity
+    }));
 
-  const labels = [];
-  const values = [];
+    const ctx = document.getElementById("portfolioChart").getContext("2d");
 
-  if (initial) {
-    labels.push("Start");
-    values.push(initial.value);
-  }
-
-  points.forEach(d => {
-    labels.push(new Date(d.ts).toLocaleTimeString());
-    values.push(d.value);
-  });
-
-  const ctx = document.getElementById("portfolioChart");
-
-  if (window.portfolioChart) {
-    window.portfolioChart.data.labels = labels;
-    window.portfolioChart.data.datasets[0].data = values;
-    window.portfolioChart.update();
-    return;
-  }
-
-  window.portfolioChart = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels,
-      datasets: [{
-        data: values,
-        borderWidth: 2,
-        tension: 0.35,
-        pointRadius: (ctx) => ctx.dataIndex === 0 ? 6 : 2,
-        pointBackgroundColor: (ctx) =>
-          ctx.dataIndex === 0 ? "#00ffcc" : "#ffffff",
-      }]
-    },
-    options: {
-      plugins: { legend: { display: false } },
-      scales: {
-        y: { beginAtZero: false }
-      }
+    if (window.portfolioChart) {
+        window.portfolioChart.data.datasets[0].data = chartData;
+        window.portfolioChart.update();
+        return;
     }
-  });
+
+    window.portfolioChart = new Chart(ctx, {
+        type: "line",
+        data: {
+            datasets: [{
+                label: 'Portfolio Equity',
+                data: chartData,
+                borderColor: '#3fb950',
+                backgroundColor: 'rgba(63, 185, 80, 0.2)',
+                fill: true,
+                tension: 0.35,
+                pointRadius: 2
+            }]
+        },
+        options: {
+            plugins: { legend: { display: false } },
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        tooltipFormat: 'MMM d, yyyy HH:mm:ss',
+                        displayFormats: { minute: 'HH:mm', hour: 'HH:mm', day: 'MMM dd' }
+                    },
+                    title: { display: true, text: 'Time' },
+                    ticks: { color: '#e6edf3' }
+                },
+                y: {
+                    beginAtZero: false,
+                    title: { display: true, text: 'Equity ($)' },
+                    ticks: { color: '#e6edf3' }
+                }
+            }
+        }
+    });
 }
 
+// Initial load and refresh every 2 minutes
 loadPortfolioChart();
 setInterval(loadPortfolioChart, 120000);
 </script>
 
-    
+</body>
 </html>
