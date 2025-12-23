@@ -225,16 +225,27 @@ while True:
         daily_pnl_dollars = get_daily_pnl()
         set_meta("daily_pnl", daily_pnl_dollars)
         
-        # Calculate % change based on the baseline
-        baseline = get_meta("portfolio_baseline", 1) # Avoid division by zero
-        pnl_percentage = (daily_pnl_dollars / baseline) * 100
-
+        # 1. Fetch baseline and ensure it is NOT zero
+        baseline = get_meta("portfolio_baseline", 0)
+        
+        # If baseline is 0, initialize it with current portfolio value to prevent crash
+        if baseline <= 0:
+            baseline = portfolio_value
+            if baseline > 0:
+                set_meta("portfolio_baseline", baseline)
+                log_activity(f"🌱 Initialized baseline to current value: ${baseline:.2f}")
+        
+        # 2. Safety check for division
+        if baseline > 0:
+            pnl_percentage = (daily_pnl_dollars / baseline) * 100
+        else:
+            pnl_percentage = 0.0
+        
         log_activity(f"📈 Daily PnL: ${daily_pnl_dollars:.2f} ({pnl_percentage:.2f}%)")
-
-        # Compare percentage to the limit
-        if pnl_percentage <= MAX_DAILY_LOSS:
-            log_activity(f"🛑 Daily Loss Limit Hit ({pnl_percentage:.2f}%). "
-                         f"Limit is {MAX_DAILY_LOSS}%. Sleeping until tomorrow.")
+        
+        # 3. Compare percentage to the limit
+        if pnl_percentage <= MAX_DAILY_LOSS and daily_pnl_dollars != 0:
+            log_activity(f"🛑 Daily Loss Limit Hit. Sleeping.")
             
             # Calculate seconds until UTC midnight to avoid checking every hour uselessly
             now = datetime.now(timezone.utc)
