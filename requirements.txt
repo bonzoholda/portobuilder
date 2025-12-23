@@ -6,5 +6,5 @@ python-dotenv
 flask==3.0.0
 gunicorn
 fastapi
-uvicorn
+uvicorn[standard]
 jinja2
