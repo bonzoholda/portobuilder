@@ -1,13 +1,15 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <meta http-equiv="refresh" content="60">
     <title>DEX Bot Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             background: #0d1117;
             color: #e6edf3;
-            font-family: Arial;
+            font-family: Arial, sans-serif;
             padding: 20px;
         }
         .card {
@@ -15,24 +17,21 @@
             padding: 15px;
             border-radius: 8px;
             margin-bottom: 20px;
+            border: 1px solid #30363d;
         }
-        table {
-            width: 100%;
-        }
-        th, td {
-            padding: 6px;
-            text-align: left;
-        }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #21262d; }
         .green { color: #3fb950; }
         .red { color: #f85149; }
+        canvas { max-height: 300px; width: 100% !important; }
     </style>
 </head>
 <body>
 
 <h2>📊 Polygon Uniswap Bot</h2>
 
-<div id="log-container" style="background:#000; color:#0f0; padding:15px; font-family:monospace; height:100px; overflow-y:auto; border-radius:5px; font-size: 0.85rem;">
-    </div>
+<div id="log-container" style="background:#000; color:#0f0; padding:15px; font-family:monospace; height:100px; overflow-y:auto; border-radius:5px; font-size: 0.85rem; margin-bottom: 20px;">
+</div>
 
 <script>
     function fetchLogs() {
@@ -41,12 +40,12 @@
             .then(data => {
                 const container = document.getElementById('log-container');
                 container.innerHTML = data.logs.map(log => `<div>${log}</div>`).join('');
-            });
+                container.scrollTop = container.scrollHeight; // Auto-scroll to bottom
+            })
+            .catch(err => console.error("Log fetch error:", err));
     }
-
-    // Refresh logs every 5 seconds
     setInterval(fetchLogs, 5000);
-    fetchLogs(); // Initial call
+    fetchLogs();
 </script>
     
 <div class="card">
@@ -77,8 +76,6 @@
   <canvas id="portfolioChart"></canvas>
 </div>
 
-    
-    
 <div class="card">
     <h3>PnL</h3>
     <p>Daily: <span class="{{ 'green' if daily_pnl >= 0 else 'red' }}">{{ daily_pnl }}</span></p>
@@ -103,63 +100,73 @@
     </table>
 </div>
 
-</body>
-
 <script>
 async function loadPortfolioChart() {
-  const res = await fetch("/api/portfolio/history");
-  const data = await res.json();
+  try {
+    const res = await fetch("/api/portfolio/history");
+    const data = await res.json();
 
-  const initial = data.find(d => d.type === "initial");
-  const points = data.filter(d => d.type === "point");
+    // Map the correct keys: 'time' and 'equity'
+    const labels = data.map(d => {
+        const date = new Date(d.time);
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    });
+    const values = data.map(d => d.equity);
 
-  const labels = [];
-  const values = [];
+    const ctx = document.getElementById("portfolioChart").getContext('2d');
 
-  if (initial) {
-    labels.push("Start");
-    values.push(initial.value);
-  }
-
-  points.forEach(d => {
-    labels.push(new Date(d.ts).toLocaleTimeString());
-    values.push(d.value);
-  });
-
-  const ctx = document.getElementById("portfolioChart");
-
-  if (window.portfolioChart) {
-    window.portfolioChart.data.labels = labels;
-    window.portfolioChart.data.datasets[0].data = values;
-    window.portfolioChart.update();
-    return;
-  }
-
-  window.portfolioChart = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels,
-      datasets: [{
-        data: values,
-        borderWidth: 2,
-        tension: 0.35,
-        pointRadius: (ctx) => ctx.dataIndex === 0 ? 6 : 2,
-        pointBackgroundColor: (ctx) =>
-          ctx.dataIndex === 0 ? "#00ffcc" : "#ffffff",
-      }]
-    },
-    options: {
-      plugins: { legend: { display: false } },
-      scales: {
-        y: { beginAtZero: false }
-      }
+    // If chart exists, update it
+    if (window.portfolioChart instanceof Chart) {
+        window.portfolioChart.data.labels = labels;
+        window.portfolioChart.data.datasets[0].data = values;
+        window.portfolioChart.update();
+        return;
     }
-  });
+
+    // Otherwise, create new chart
+    window.portfolioChart = new Chart(ctx, {
+        type: "line",
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Equity (USD)',
+                data: values,
+                borderColor: '#3fb950',
+                backgroundColor: 'rgba(63, 185, 80, 0.1)',
+                borderWidth: 2,
+                tension: 0.3,
+                fill: true,
+                pointRadius: 3,
+                pointBackgroundColor: "#ffffff"
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { 
+                    beginAtZero: false,
+                    grid: { color: '#30363d' },
+                    ticks: { color: '#8b949e' }
+                },
+                x: { 
+                    grid: { display: false },
+                    ticks: { color: '#8b949e' }
+                }
+            }
+        }
+    });
+  } catch (error) {
+    console.error("Error loading chart:", error);
+  }
 }
 
+// Initial load
 loadPortfolioChart();
+// Update every 2 minutes
 setInterval(loadPortfolioChart, 120000);
 </script>
 
-    
+</body>
 </html>
