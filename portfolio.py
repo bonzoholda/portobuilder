@@ -38,16 +38,13 @@ def get_portfolio_value():
     total = 0.0
 
     for asset, amount, price in balances:
-        if amount is None or amount == 0:
+        # DUST FILTER: Ignore balances worth less than 1 cent
+        if amount is None or (amount * (price or 0)) < 0.01:
             continue
 
-        # If price is stored, trust it
         if price and price > 0:
             total += amount * price
-        else:
-            # Worst-case fallback
-            total += 0
-
+            
     return round(total, 6)
 
 
