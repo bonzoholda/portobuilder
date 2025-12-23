@@ -4,9 +4,6 @@ import sqlite3
 import time
 import os
 
-# === Import WSGIMiddleware to mount FastAPI ===
-from fastapi.middleware.wsgi import WSGIMiddleware
-from dashboard.app import app as fastapi_app  # your FastAPI app
 
 app = Flask(__name__)
 
@@ -82,8 +79,7 @@ def get_logs():
         last_logs.reverse() 
     return {"logs": last_logs}
 
-# === MOUNT FastAPI app under /api ===
-app.wsgi_app = WSGIMiddleware(fastapi_app, app.wsgi_app)
+
 
 # --- RUN ---
 if __name__ == "__main__":
