@@ -9,7 +9,9 @@ app = Flask(__name__)
 
 # Simple and reliable for same-container setups
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB = os.path.join(BASE_DIR, "trader.db")
+DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "trader.db")
+DB = os.path.abspath(DB)
+
 
 # --- Existing query function ---
 def query(sql, params=()):
