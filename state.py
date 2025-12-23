@@ -113,6 +113,16 @@ def record_trade(
         equity_after
     ))
 
+    # --- NEW: CRITICAL SYNC LOGIC ---
+    asset = pair.split('/')[0]
+    if side.upper() == "SELL":
+        # When we sell, we explicitly set the balance to 0 in our DB
+        # to prevent "Ghost Positions" before the next sync happens.
+        c.execute("UPDATE balances SET amount = 0, price = 0 WHERE asset = ?", (asset,))
+    elif side.upper() == "BUY":
+        # When we buy, we update the amount immediately
+        c.execute("UPDATE balances SET amount = ?, entry_price = ? WHERE asset = ?", (amount_out, price, asset))
+        
     conn.commit()
     conn.close()
 
