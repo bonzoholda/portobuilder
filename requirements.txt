@@ -5,3 +5,6 @@ ta
 python-dotenv
 flask==3.0.0
 gunicorn
+fastapi
+uvicorn
+jinja2
