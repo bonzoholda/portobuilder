@@ -73,7 +73,7 @@ def index():
 
 @app.route('/logs')
 def get_logs():
-    log_file = 'bot_activity.log'
+    log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'bot_activity.log')
     if not os.path.exists(log_file):
         return {"logs": ["No logs yet..."]}
     
