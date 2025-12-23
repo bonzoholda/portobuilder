@@ -1,12 +1,9 @@
 # main.py
-from fastapi import FastAPI
 from fastapi.middleware.wsgi import WSGIMiddleware
-from dashboard import app as flask_app  # your existing Flask app
-from dashboard.app import app as fastapi_app   # your FastAPI app
+from dashboard import app as flask_app   # Flask app in dashboard.py
+from dashboard.app import app as fastapi_app  # FastAPI app
 
-# Mount Flask inside FastAPI at /dashboard
+# Mount Flask under FastAPI at /dashboard
 fastapi_app.mount("/dashboard", WSGIMiddleware(flask_app))
 
-# Now FastAPI runs as main ASGI server:
-# /api/... -> FastAPI
-# /dashboard/... -> Flask
+# fastapi_app is now the ASGI entrypoint
