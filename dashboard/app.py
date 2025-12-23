@@ -1,24 +1,23 @@
+# dashboard/app.py
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 import json
 from pathlib import Path
 
-
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-
 SNAPSHOT_FILE = Path("portfolio_snapshots.json")
 
-@app.route("/api/portfolio/history")
-def portfolio_history():
+@app.get("/api/portfolio/history")  # Use @app.get instead of @app.route
+async def portfolio_history():
     if not SNAPSHOT_FILE.exists():
-        return []
+        return JSONResponse(content=[])
 
     data = json.loads(SNAPSHOT_FILE.read_text())
 
-    return [
+    result = [
         {
             "time": d["ts"],
             "equity": d["value"],
@@ -26,3 +25,4 @@ def portfolio_history():
         }
         for d in data
     ]
+    return JSONResponse(content=result)
