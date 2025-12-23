@@ -1,7 +1,7 @@
 # main.py
 from fastapi import FastAPI
 from fastapi.middleware.wsgi import WSGIMiddleware
-from dashboard import dashboard as flask_app  # your existing Flask app
+import dashboard as flask_app  # your existing Flask app
 from dashboard.app import app as fastapi_app   # your FastAPI app
 
 # Mount Flask inside FastAPI at /dashboard
