@@ -264,18 +264,28 @@ while True:
         
                 symbol = symbols[0] if symbols[1] == "USDC" else symbols[1]
         
+                # One position per asset
                 if symbol in active_assets:
                     continue
         
+                # ---- Micro-scalp timeframe (SAFE) ----
                 df = load_ohlcv(symbol, "15m")
                 if df is None or len(df) < 20:
                     continue
         
-                rsi = df["rsi"].iloc[-1]
+                # ---- RSI CALC (LOCAL, SAFE) ----
+                delta = df["close"].diff()
+                gain = delta.clip(lower=0).rolling(14).mean()
+                loss = (-delta.clip(upper=0)).rolling(14).mean()
+                rs = gain / loss
+                rsi = 100 - (100 / (1 + rs))
+                rsi_val = rsi.iloc[-1]
+        
                 last_close = df["close"].iloc[-1]
                 prev_close = df["close"].iloc[-2]
         
-                if rsi > 38:
+                # ---- MICRO-SCALP ENTRY CONDITIONS ----
+                if rsi_val > 40:
                     continue
         
                 if last_close <= prev_close:
@@ -286,7 +296,8 @@ while True:
                     continue
         
                 log_activity(
-                    f"⚡ MICRO-SCALP BUY {symbol} | RSI={rsi:.1f} | ${usdc_amount:.2f}"
+                    f"⚡ MICRO-SCALP BUY {symbol} | "
+                    f"RSI={rsi_val:.1f} | ${usdc_amount:.2f}"
                 )
         
                 try:
@@ -310,6 +321,7 @@ while True:
         
                 except Exception as e:
                     log_activity(f"⚠️ Buy failed {symbol}: {e}")
+
 
 
 
