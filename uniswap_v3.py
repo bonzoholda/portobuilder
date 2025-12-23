@@ -84,51 +84,57 @@ class UniswapV3Client:
             time.sleep(5) # Cooldown for network state sync
 
     def swap_exact_input(self, token_in, token_out, amount_in):
-        """Executes a swap on Uniswap V3 with dynamic gas and status verification."""
-        token_in = Web3.to_checksum_address(token_in)
-        token_out = Web3.to_checksum_address(token_out)
-        
-        # Calculate decimals for input amount
-        erc20_in = self.w3.eth.contract(address=token_in, abi=ERC20_ABI)
-        decimals = erc20_in.functions.decimals().call()
-        amount_in_wei = int(Decimal(str(amount_in)) * (10 ** decimals))
-
-        # 1. Handle Approval
-        self._force_approve(token_in, amount_in_wei)
-
-        # 2. Build Swap Parameters
-        params = {
-            "tokenIn": token_in,
-            "tokenOut": token_out,
-            "fee": 500, # 0.05% tier
-            "recipient": WALLET_ADDRESS,
-            "deadline": int(time.time()) + 600,
-            "amountIn": amount_in_wei,
-            "amountOutMinimum": 0, # Slippage handled by higher logic or set via quoter
-            "sqrtPriceLimitX96": 0
-        }
-
-        print(f"🚀 Attempting Swap: {amount_in} {token_in} -> {token_out}")
-        
-        try:
-            gas_params = self._get_gas_params()
-            tx = self.router.functions.exactInputSingle(params).build_transaction({
-                "from": WALLET_ADDRESS,
-                "nonce": self._get_fresh_nonce(),
-                "gas": 350000, # Sufficient for complex V3 swaps
-                "chainId": CHAIN_ID,
-                **gas_params
-            })
+            """Executes a swap with Pre-flight Simulation to save gas."""
+            token_in = Web3.to_checksum_address(token_in)
+            token_out = Web3.to_checksum_address(token_out)
             
-            signed = self.account.sign_transaction(tx)
-            tx_hash = self.w3.eth.send_raw_transaction(signed.rawTransaction)
-            
-            # Return the hash immediately so bot.py can use wait_for_success helper
-            return tx_hash.hex()
-            
-        except Exception as e:
-            print(f"❌ Swap build/send failed: {e}")
-            raise e
+            erc20_in = self.w3.eth.contract(address=token_in, abi=ERC20_ABI)
+            decimals = erc20_in.functions.decimals().call()
+            amount_in_wei = int(Decimal(str(amount_in)) * (10 ** decimals))
+    
+            # 1. Approval check
+            self._force_approve(token_in, amount_in_wei)
+    
+            # 2. Try multiple fee tiers to find liquidity
+            # 500 = 0.05%, 3000 = 0.3%, 10000 = 1%
+            for fee_tier in [500, 3000, 10000]:
+                params = {
+                    "tokenIn": token_in,
+                    "tokenOut": token_out,
+                    "fee": fee_tier,
+                    "recipient": WALLET_ADDRESS,
+                    "deadline": int(time.time()) + 600,
+                    "amountIn": amount_in_wei,
+                    "amountOutMinimum": 0,
+                    "sqrtPriceLimitX96": 0
+                }
+    
+                try:
+                    gas_params = self._get_gas_params()
+                    
+                    # --- PRE-FLIGHT SIMULATION ---
+                    # This 'call()' simulates the TX without spending gas.
+                    # If it fails here, we don't send the real TX.
+                    self.router.functions.exactInputSingle(params).call({"from": WALLET_ADDRESS})
+                    
+                    # If simulation passes, build and send the real transaction
+                    tx = self.router.functions.exactInputSingle(params).build_transaction({
+                        "from": WALLET_ADDRESS,
+                        "nonce": self._get_fresh_nonce(),
+                        "gas": 300000, 
+                        "chainId": CHAIN_ID,
+                        **gas_params
+                    })
+                    
+                    signed = self.account.sign_transaction(tx)
+                    tx_hash = self.w3.eth.send_raw_transaction(signed.rawTransaction)
+                    return tx_hash.hex()
+    
+                except Exception as e:
+                    print(f"⚠️ Tier {fee_tier} failed simulation: {e}")
+                    continue # Try the next fee tier
+    
+            raise Exception("❌ All liquidity tiers failed simulation. Trade cancelled to save gas.")
 
     def buy_with_usdc(self, token, usdc_amount):
         return self.swap_exact_input(USDC, token, usdc_amount)
