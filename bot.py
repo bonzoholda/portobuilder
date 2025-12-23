@@ -286,7 +286,7 @@ while True:
                 last_close = df["close"].iloc[-1]
                 prev_close = df["close"].iloc[-2]
 
-                log_activity(f"{symbol}: rsi {rsi_val}, last_close {last_close}, prev_close {prev_close}")
+                log_activity(f"{symbol}: rsi {rsi_val:.1f}, last_close {last_close:.1f}, prev_close {prev_close:.1f}")
                 
                 # ---- MICRO-SCALP ENTRY CONDITIONS ----
                 if rsi_val > 40:
