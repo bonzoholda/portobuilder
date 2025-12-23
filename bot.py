@@ -252,59 +252,69 @@ while True:
                 )
                 sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
 
-            # ================= ENTRIES =================
+            # ================= ENTRIES (MICRO-SCALP MODE) =================
             if can_trade(state):
+                active_assets = {ap['asset'] for ap in get_active_positions()}
+            
                 for p in get_safe_pairs() or []:
                     symbols = [p["token0"]["symbol"], p["token1"]["symbol"]]
                     if "USDC" not in symbols:
                         continue
-    
+            
                     symbol = symbols[0] if symbols[1] == "USDC" else symbols[1]
-                    if any(ap['asset'] == symbol for ap in get_active_positions()):
+            
+                    # One position per asset
+                    if symbol in active_assets:
                         continue
-    
-                    df_ltf = load_ohlcv(symbol, "5m")
-                    if df_ltf is None:
+            
+                    # ---- Micro-scalp timeframe ----
+                    df = load_ohlcv(symbol, "5m")
+                    if df is None or len(df) < 20:
                         continue
-    
-                    df_htf = load_ohlcv(symbol, "1h")
-    
-                    ltf_ok = entry_ok(df_ltf)
-                    htf_pass = df_htf is not None and htf_ok(df_htf)
-    
-                    # Aggressive entry: LTF can override HTF
-                    if ltf_ok and (htf_pass or compute_rsi(df_ltf) < 42):
-                        usdc_amount = calculate_trade_size()
-                        if usdc_amount < 1:
-                            continue
-    
-                        log_activity(
-                            f"🟢 BUY {symbol} | "
-                            f"LTF_RSI={compute_rsi(df_ltf):.1f} | "
-                            f"HTF={'OK' if htf_pass else 'OVERRIDE'} | "
-                            f"${usdc_amount:.2f}"
-                        )
-    
+            
+                    # ---- Indicators ----
+                    rsi = df["rsi"].iloc[-1]
+                    last_close = df["close"].iloc[-1]
+                    prev_close = df["close"].iloc[-2]
+            
+                    # ---- MICRO-SCALP ENTRY CONDITIONS ----
+                    # RSI dip + momentum flip
+                    if rsi > 38:
+                        continue
+            
+                    if last_close <= prev_close:
+                        continue
+            
+                    usdc_amount = calculate_trade_size()
+                    if usdc_amount < 1:
+                        continue
+            
+                    log_activity(
+                        f"⚡ MICRO-SCALP BUY {symbol} | "
+                        f"RSI={rsi:.1f} | ${usdc_amount:.2f}"
+                    )
+            
+                    try:
                         tx = client.buy_with_usdc(
                             TOKEN_BY_SYMBOL[symbol],
                             usdc_amount
                         )
-    
+            
                         record_trade(
                             f"{symbol}/USDC",
                             "BUY",
                             usdc_amount,
                             0,
                             get_price(symbol),
-                            tx
+                            tx,
+                            strategy_tag="micro_scalp"
                         )
-    
-                        sync_balances(
-                            client.w3,
-                            WALLET_ADDRESS,
-                            TOKENS_TO_TRACK
-                        )
-                        time.sleep(10)
+            
+                        sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
+                        time.sleep(5)
+            
+                    except Exception as e:
+                        log_activity(f"⚠️ Buy failed {symbol}: {e}")
 
 
         log_activity(f"😴 Cycle complete. Sleeping {LOOP_SLEEP}s.")
