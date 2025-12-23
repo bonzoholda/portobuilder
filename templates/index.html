@@ -73,26 +73,10 @@
 </div>
 
 <div class="card">
-    <h3>📈 Portfolio Equity</h3>
-    <p style="color:#8b949e;">
-        View portfolio growth over time based on snapshot data.
-    </p>
-
-    <button
-        onclick="window.open('/equity', '_blank')"
-        style="
-            background:#238636;
-            color:white;
-            border:none;
-            padding:10px 14px;
-            border-radius:6px;
-            cursor:pointer;
-            font-size:0.9rem;
-        "
-    >
-        Open Equity Curve
-    </button>
+  <h3>📈 Portfolio Growth</h3>
+  <canvas id="portfolioChart"></canvas>
 </div>
+
     
     
 <div class="card">
@@ -120,4 +104,62 @@
 </div>
 
 </body>
+
+<script>
+async function loadPortfolioChart() {
+  const res = await fetch("/api/portfolio/history");
+  const data = await res.json();
+
+  const initial = data.find(d => d.type === "initial");
+  const points = data.filter(d => d.type === "point");
+
+  const labels = [];
+  const values = [];
+
+  if (initial) {
+    labels.push("Start");
+    values.push(initial.value);
+  }
+
+  points.forEach(d => {
+    labels.push(new Date(d.ts).toLocaleTimeString());
+    values.push(d.value);
+  });
+
+  const ctx = document.getElementById("portfolioChart");
+
+  if (window.portfolioChart) {
+    window.portfolioChart.data.labels = labels;
+    window.portfolioChart.data.datasets[0].data = values;
+    window.portfolioChart.update();
+    return;
+  }
+
+  window.portfolioChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        borderWidth: 2,
+        tension: 0.35,
+        pointRadius: (ctx) => ctx.dataIndex === 0 ? 6 : 2,
+        pointBackgroundColor: (ctx) =>
+          ctx.dataIndex === 0 ? "#00ffcc" : "#ffffff",
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: false }
+      }
+    }
+  });
+}
+
+loadPortfolioChart();
+setInterval(loadPortfolioChart, 120000);
+</script>
+
+    
 </html>
