@@ -153,7 +153,7 @@ def update_position_state(symbol, column, value):
     conn.close()
 
 def snapshot_portfolioGrowth(value: float):
-    now = datetime.now(datetime.UTC)
+    now = datetime.now(timezone.utc)
 
     data = []
     if SNAPSHOT_FILE.exists():
