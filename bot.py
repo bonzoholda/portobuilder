@@ -70,8 +70,8 @@ TRAILING_PERCENT = 0.005
 PORTFOLIO_TRAILING_PCT = 0.03
 
 SNAPSHOT_FILE = Path("portfolio_snapshots.json")
-SNAPSHOT_INTERVAL = 300  # 5 minutes
-_last_snapshot_ts = 0
+SNAPSHOT_INTERVAL = 300        # 5 minutes
+MAX_POINTS = 288               # 24h * 12 points/hr
 
 client = UniswapV3Client()
 log_activity("✅ Bot started with Tiered Exit Strategy (30/30/40)")
@@ -153,7 +153,7 @@ def update_position_state(symbol, column, value):
     conn.close()
 
 def snapshot_portfolioGrowth(value: float):
-    now = datetime.utcnow()
+    now = datetime.datetime.now(datetime.UTC)
 
     data = []
     if SNAPSHOT_FILE.exists():
