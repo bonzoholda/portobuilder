@@ -267,7 +267,7 @@ while True:
                 if symbol in active_assets:
                     continue
         
-                df = load_ohlcv(symbol, "5m")
+                df = load_ohlcv(symbol, "15m")
                 if df is None or len(df) < 20:
                     continue
         
