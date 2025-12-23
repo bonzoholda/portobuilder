@@ -6,9 +6,7 @@ import os
 
 
 app = Flask(
-    __name__,
-    template_folder=os.path.join(BASE_DIR, "templates"),
-    static_folder=os.path.join(BASE_DIR, "static")
+    __name__
 )
 
 # Simple and reliable for same-container setups
