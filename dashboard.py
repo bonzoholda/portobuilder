@@ -8,7 +8,7 @@ app = Flask(__name__)
 # Simple and reliable for same-container setups
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE_DIR, "trader.db")
-SNAPSHOT_FILE = os.path.join(BASE_DIR, "portfolio_snapshots.json")
+
 
 
 def query(sql, params=()):
@@ -95,20 +95,6 @@ def get_logs():
     return {"logs": last_logs}
 
 
-@app.route("/api/portfolio/history")
-def portfolio_history():
-    if not os.path.exists(SNAPSHOT_FILE):
-        return jsonify([])
-
-    try:
-        with open(SNAPSHOT_FILE, "r") as f:
-            data = f.read().strip()
-            if not data:
-                return jsonify([])
-            return jsonify(json.loads(data))
-    except Exception as e:
-        print(f"❌ Snapshot read error: {e}")
-        return jsonify([])
 
 
 
