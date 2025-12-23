@@ -175,18 +175,31 @@ def snapshot_portfolioGrowth(value: float):
     SNAPSHOT_FILE.write_text(json.dumps(initial + points))
 
 def wait_for_success(w3, tx_hash, timeout=120):
+    """
+    Waits for a transaction receipt and returns True only if it succeeded.
+    """
+    # Ensure tx_hash is just the hex string if it's a HexBytes object
+    hash_str = tx_hash.hex() if hasattr(tx_hash, 'hex') else str(tx_hash)
+    
     if not tx_hash:
         return False
     try:
-        log_activity(f"⏳ Waiting for receipt: {tx_hash}")
+        log_activity(f"⏳ Waiting for receipt: {hash_str}")
+        
+        # Wait for the transaction to be included in a block
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=timeout)
+        
+        # Check status: 1 = Success, 0 = Reverted
         if receipt.status == 1:
-            log_activity(f"✅ Transaction confirmed: {tx_hash}")
+            log_activity(f"✅ Transaction confirmed successful: {hash_str}")
             return True
-        log_activity(f"❌ Transaction REVERTED: {tx_hash}")
-        return False
+        else:
+            log_activity(f"❌ Transaction REVERTED on-chain: {hash_str}")
+            return False
+            
     except Exception as e:
-        log_activity(f"⚠️ Verification error {tx_hash}: {e}")
+        # We use hash_str here to avoid passing the complex receipt object to the log
+        log_activity(f"⚠️ Error verifying transaction {hash_str}: {e}")
         return False
 
 # ================= START =================
