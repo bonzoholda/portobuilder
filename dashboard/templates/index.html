@@ -40,7 +40,7 @@
             .then(data => {
                 const container = document.getElementById('log-container');
                 container.innerHTML = data.logs.map(log => `<div>${log}</div>`).join('');
-                container.scrollTop = container.scrollHeight; // Auto-scroll to bottom
+                //container.scrollTop = container.scrollHeight; // Auto-scroll to bottom
             })
             .catch(err => console.error("Log fetch error:", err));
     }
