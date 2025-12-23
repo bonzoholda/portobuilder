@@ -233,13 +233,13 @@ while True:
             entry_price = pos['price']
             if entry_price <= 0:
                 continue
-
+        
             levels = exit_levels(entry_price)
             token_addr = TOKEN_BY_SYMBOL[symbol]
-
+        
             if cur_price > pos.get('ath', 0):
                 update_position_state(symbol, "ath", cur_price)
-
+        
             if cur_price <= levels['sl']:
                 tx = client.sell_for_usdc(token_addr, pos['amount'])
                 record_trade(
@@ -252,69 +252,65 @@ while True:
                 )
                 sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
 
-            # ================= ENTRIES (MICRO-SCALP MODE) =================
-            if can_trade(state):
-                active_assets = {ap['asset'] for ap in get_active_positions()}
-            
-                for p in get_safe_pairs() or []:
-                    symbols = [p["token0"]["symbol"], p["token1"]["symbol"]]
-                    if "USDC" not in symbols:
-                        continue
-            
-                    symbol = symbols[0] if symbols[1] == "USDC" else symbols[1]
-            
-                    # One position per asset
-                    if symbol in active_assets:
-                        continue
-            
-                    # ---- Micro-scalp timeframe ----
-                    df = load_ohlcv(symbol, "5m")
-                    if df is None or len(df) < 20:
-                        continue
-            
-                    # ---- Indicators ----
-                    rsi = df["rsi"].iloc[-1]
-                    last_close = df["close"].iloc[-1]
-                    prev_close = df["close"].iloc[-2]
-            
-                    # ---- MICRO-SCALP ENTRY CONDITIONS ----
-                    # RSI dip + momentum flip
-                    if rsi > 38:
-                        continue
-            
-                    if last_close <= prev_close:
-                        continue
-            
-                    usdc_amount = calculate_trade_size()
-                    if usdc_amount < 1:
-                        continue
-            
-                    log_activity(
-                        f"⚡ MICRO-SCALP BUY {symbol} | "
-                        f"RSI={rsi:.1f} | ${usdc_amount:.2f}"
+
+        # ================= ENTRIES (MICRO-SCALP MODE) =================
+        if can_trade(state):
+            active_assets = {ap['asset'] for ap in get_active_positions()}
+        
+            for p in get_safe_pairs() or []:
+                symbols = [p["token0"]["symbol"], p["token1"]["symbol"]]
+                if "USDC" not in symbols:
+                    continue
+        
+                symbol = symbols[0] if symbols[1] == "USDC" else symbols[1]
+        
+                if symbol in active_assets:
+                    continue
+        
+                df = load_ohlcv(symbol, "5m")
+                if df is None or len(df) < 20:
+                    continue
+        
+                rsi = df["rsi"].iloc[-1]
+                last_close = df["close"].iloc[-1]
+                prev_close = df["close"].iloc[-2]
+        
+                if rsi > 38:
+                    continue
+        
+                if last_close <= prev_close:
+                    continue
+        
+                usdc_amount = calculate_trade_size()
+                if usdc_amount < 1:
+                    continue
+        
+                log_activity(
+                    f"⚡ MICRO-SCALP BUY {symbol} | RSI={rsi:.1f} | ${usdc_amount:.2f}"
+                )
+        
+                try:
+                    tx = client.buy_with_usdc(
+                        TOKEN_BY_SYMBOL[symbol],
+                        usdc_amount
                     )
-            
-                    try:
-                        tx = client.buy_with_usdc(
-                            TOKEN_BY_SYMBOL[symbol],
-                            usdc_amount
-                        )
-            
-                        record_trade(
-                            f"{symbol}/USDC",
-                            "BUY",
-                            usdc_amount,
-                            0,
-                            get_price(symbol),
-                            tx,
-                            strategy_tag="micro_scalp"
-                        )
-            
-                        sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
-                        time.sleep(5)
-            
-                    except Exception as e:
-                        log_activity(f"⚠️ Buy failed {symbol}: {e}")
+        
+                    record_trade(
+                        f"{symbol}/USDC",
+                        "BUY",
+                        usdc_amount,
+                        0,
+                        get_price(symbol),
+                        tx,
+                        strategy_tag="micro_scalp"
+                    )
+        
+                    sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
+                    time.sleep(5)
+        
+                except Exception as e:
+                    log_activity(f"⚠️ Buy failed {symbol}: {e}")
+
 
 
         log_activity(f"😴 Cycle complete. Sleeping {LOOP_SLEEP}s.")
