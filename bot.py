@@ -3,6 +3,7 @@ import time
 import sqlite3
 import requests
 import logging
+import json
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timezone
 
@@ -35,6 +36,7 @@ from portfolio import get_portfolio_value, visualize_portfolio
 from web3 import Web3
 from uniswap_abi import ERC20_ABI
 from config import WALLET_ADDRESS, USDC
+from pathlib import Path
 
 # ================= LOGGING =================
 log_file = 'bot_activity.log'
@@ -66,6 +68,10 @@ MAX_DAILY_LOSS = -1.5
 LOOP_SLEEP = 60
 TRAILING_PERCENT = 0.005
 PORTFOLIO_TRAILING_PCT = 0.03
+
+SNAPSHOT_FILE = Path("portfolio_snapshots.json")
+SNAPSHOT_INTERVAL = 300  # 5 minutes
+_last_snapshot_ts = 0
 
 client = UniswapV3Client()
 log_activity("✅ Bot started with Tiered Exit Strategy (30/30/40)")
@@ -146,6 +152,44 @@ def update_position_state(symbol, column, value):
     conn.commit()
     conn.close()
 
+def snapshot_portfolioGrowth(value: float):
+    now = datetime.utcnow()
+
+    data = []
+    if SNAPSHOT_FILE.exists():
+        data = json.loads(SNAPSHOT_FILE.read_text())
+
+    # 1️⃣ Create initial snapshot if not exists
+    if not any(d.get("type") == "initial" for d in data):
+        data.insert(0, {
+            "type": "initial",
+            "ts": now.isoformat(),
+            "value": round(value, 4)
+        })
+        SNAPSHOT_FILE.write_text(json.dumps(data))
+        return
+
+    # 2️⃣ Enforce interval (5 min)
+    last = next((d for d in reversed(data) if d["type"] == "point"), None)
+    if last:
+        last_ts = datetime.fromisoformat(last["ts"])
+        if (now - last_ts).total_seconds() < SNAPSHOT_INTERVAL:
+            return
+
+    # 3️⃣ Append new point
+    data.append({
+        "type": "point",
+        "ts": now.isoformat(),
+        "value": round(value, 4)
+    })
+
+    # 4️⃣ Keep initial + last 24h points
+    points = [d for d in data if d["type"] == "point"][-MAX_POINTS:]
+    initial = [d for d in data if d["type"] == "initial"][:1]
+
+    SNAPSHOT_FILE.write_text(json.dumps(initial + points))
+
+
 # ================= START =================
 log_activity("🔄 Performing initial balance sync...")
 sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
@@ -163,6 +207,8 @@ while True:
         snapshot_portfolio(
             realized_pnl=get_meta("realized_pnl", 0)
         )
+
+        snapshot_portfolioGrowth(portfolio_value)
         
         log_activity(
             f"📊 Baseline ${get_meta('portfolio_baseline', 0):.4f} | "
