@@ -10,14 +10,14 @@ templates = Jinja2Templates(directory="templates")
 
 SNAPSHOT_FILE = Path("portfolio_snapshots.json")
 
-@app.get("/api/portfolio/history")  # Use @app.get instead of @app.route
-async def portfolio_history():
+@app.get("/api/portfolio/history")
+def portfolio_history():
     if not SNAPSHOT_FILE.exists():
-        return JSONResponse(content=[])
+        return []
 
     data = json.loads(SNAPSHOT_FILE.read_text())
 
-    result = [
+    return [
         {
             "time": d["ts"],
             "equity": d["value"],
@@ -25,4 +25,4 @@ async def portfolio_history():
         }
         for d in data
     ]
-    return JSONResponse(content=result)
+
