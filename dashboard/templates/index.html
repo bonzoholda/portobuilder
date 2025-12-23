@@ -36,7 +36,7 @@
 
 <script>
     function fetchLogs() {
-        fetch('/logs')
+        fetch('/dashboard/logs')
             .then(response => response.json())
             .then(data => {
                 const container = document.getElementById('log-container');
