@@ -259,6 +259,7 @@ while True:
         
             for p in get_safe_pairs() or []:
                 symbols = [p["token0"]["symbol"], p["token1"]["symbol"]]
+                log_activity(f">>>>>> Scanning {symbol}")
                 if "USDC" not in symbols:
                     continue
         
