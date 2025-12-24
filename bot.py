@@ -243,24 +243,16 @@ while True:
         
         log_activity(f"📈 Daily PnL: ${daily_pnl_dollars:.2f} ({pnl_percentage:.2f}%)")
 
-        # Determine if we are allowed to enter new trades
-        trading_halted = pnl_percentage <= MAX_DAILY_LOSS
+        # 3. Determine if we are allowed to enter new trades (The Killswitch)
+        # Only halt if pnl is negative AND exceeds the limit
+        trading_halted = (pnl_percentage <= MAX_DAILY_LOSS) and (daily_pnl_dollars < 0)
 
         if trading_halted:
-            log_activity(f"⚠️ RISK ALERT: Entry logic paused ({pnl_percentage:.2f}% loss). "
-                         "Monitoring exits/portfolio only.")        
+            log_activity(f"🛑 RISK HALT ACTIVE: Entry logic paused ({pnl_percentage:.2f}% loss). "
+                         "Still monitoring active positions for Profit/Exits.")
         
-        # 3. Compare percentage to the limit
-        if pnl_percentage <= MAX_DAILY_LOSS and daily_pnl_dollars != 0:
-            log_activity(f"🛑 Daily Loss Limit Hit. Sleeping.")
-            
-            # Calculate seconds until UTC midnight to avoid checking every hour uselessly
-            now = datetime.now(timezone.utc)
-            tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-            sleep_seconds = (tomorrow - now).total_seconds()
-            
-            time.sleep(min(sleep_seconds, 3600)) # Sleep max 1hr or until midnight
-            continue
+        # NOTE: We removed the time.sleep() and continue from here.
+        # This allows the code to fall through to the Portfolio Trailing and Exit sections.
 
         # ================= PORTFOLIO TRAILING =================
         ath = get_meta("portfolio_ath", 0)
