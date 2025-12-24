@@ -242,6 +242,13 @@ while True:
             pnl_percentage = 0.0
         
         log_activity(f"📈 Daily PnL: ${daily_pnl_dollars:.2f} ({pnl_percentage:.2f}%)")
+
+        # Determine if we are allowed to enter new trades
+        trading_halted = pnl_percentage <= MAX_DAILY_LOSS
+
+        if trading_halted:
+            log_activity(f"⚠️ RISK ALERT: Entry logic paused ({pnl_percentage:.2f}% loss). "
+                         "Monitoring exits/portfolio only.")        
         
         # 3. Compare percentage to the limit
         if pnl_percentage <= MAX_DAILY_LOSS and daily_pnl_dollars != 0:
@@ -293,7 +300,7 @@ while True:
                     log_activity(f"⚠️ Exit failed {symbol}: {e}")
                     
         # ================= ENTRIES =================
-        if can_trade(state):
+        if can_trade(state) and not trading_halted:
             active_assets = {ap['asset'] for ap in get_active_positions()}
             for p in get_safe_pairs() or []:
                 symbols = [p["token0"]["symbol"], p["token1"]["symbol"]]
@@ -324,6 +331,9 @@ while True:
                                 sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
                         except Exception as e:
                             log_activity(f"⚠️ Buy failed {symbol}: {e}")
+
+        elif trading_halted:
+            log_activity("🚫 Skipping scan: Daily loss limit active.")
 
         log_activity(f"😴 Cycle complete. Sleeping {LOOP_SLEEP}s.")
         time.sleep(LOOP_SLEEP)
