@@ -73,7 +73,7 @@ SNAPSHOT_INTERVAL = 300
 MAX_POINTS = 288
 
 client = UniswapV3Client()
-log_activity("✅ Bot started with Tiered Exit Strategy (30/30/40)")
+log_activity("✅ Bot started with Tiered Exit Strategy & RSI Hook Logic")
 
 baseline = get_or_init_baseline()
 log_activity(f"📊 Portfolio baseline initialized at ${baseline:.2f}")
@@ -103,7 +103,6 @@ def today_timestamp():
 def get_daily_pnl():
     conn = sqlite3.connect("trader.db")
     c = conn.cursor()
-    # We sum the net result of all trades today
     c.execute("""
         SELECT COALESCE(SUM(amount_out - amount_in), 0)
         FROM trades
@@ -176,30 +175,18 @@ def snapshot_portfolioGrowth(value: float):
     SNAPSHOT_FILE.write_text(json.dumps(initial + points))
 
 def wait_for_success(w3, tx_hash, timeout=120):
-    """
-    Waits for a transaction receipt and returns True only if it succeeded.
-    """
-    # Ensure tx_hash is just the hex string if it's a HexBytes object
     hash_str = tx_hash.hex() if hasattr(tx_hash, 'hex') else str(tx_hash)
-    
-    if not tx_hash:
-        return False
+    if not tx_hash: return False
     try:
         log_activity(f"⏳ Waiting for receipt: {hash_str}")
-        
-        # Wait for the transaction to be included in a block
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=timeout)
-        
-        # Check status: 1 = Success, 0 = Reverted
         if receipt.status == 1:
             log_activity(f"✅ Transaction confirmed successful: {hash_str}")
             return True
         else:
             log_activity(f"❌ Transaction REVERTED on-chain: {hash_str}")
             return False
-            
     except Exception as e:
-        # We use hash_str here to avoid passing the complex receipt object to the log
         log_activity(f"⚠️ Error verifying transaction {hash_str}: {e}")
         return False
 
@@ -218,47 +205,34 @@ while True:
         snapshot_portfolioGrowth(portfolio_value)
         
         baseline = get_meta("portfolio_baseline", 0)
-        visualize_portfolio(baseline, portfolio_value)
+        
+        # Self-heal baseline if zero
+        if baseline <= 0 and portfolio_value > 0:
+            baseline = portfolio_value
+            set_meta("portfolio_baseline", baseline)
+            log_activity(f"🌱 Baseline initialized to ${baseline:.2f}")
 
+        visualize_portfolio(baseline, portfolio_value)
         state = load_state()
+
         # ================= RISK MANAGEMENT =================
         daily_pnl_dollars = get_daily_pnl()
         set_meta("daily_pnl", daily_pnl_dollars)
         
-        # 1. Fetch baseline and ensure it is NOT zero
-        baseline = get_meta("portfolio_baseline", 0)
-        
-        # If baseline is 0, initialize it with current portfolio value to prevent crash
-        if baseline <= 0:
-            baseline = portfolio_value
-            if baseline > 0:
-                set_meta("portfolio_baseline", baseline)
-                log_activity(f"🌱 Initialized baseline to current value: ${baseline:.2f}")
-        
-        # 2. Safety check for division
-        if baseline > 0:
-            pnl_percentage = (daily_pnl_dollars / baseline) * 100
-        else:
-            pnl_percentage = 0.0
-        
+        pnl_percentage = (daily_pnl_dollars / baseline * 100) if baseline > 0 else 0
         log_activity(f"📈 Daily PnL: ${daily_pnl_dollars:.2f} ({pnl_percentage:.2f}%)")
 
-        # 3. Determine if we are allowed to enter new trades (The Killswitch)
-        # Only halt if pnl is negative AND exceeds the limit
+        # Trading Halt logic (Soft lock)
         trading_halted = (pnl_percentage <= MAX_DAILY_LOSS) and (daily_pnl_dollars < 0)
 
         if trading_halted:
-            log_activity(f"🛑 RISK HALT ACTIVE: Entry logic paused ({pnl_percentage:.2f}% loss). "
-                         "Still monitoring active positions for Profit/Exits.")
-        
-        # NOTE: We removed the time.sleep() and continue from here.
-        # This allows the code to fall through to the Portfolio Trailing and Exit sections.
+            log_activity(f"⚠️ RISK HALT: Entry logic paused. Monitoring exits only.")
 
         # ================= PORTFOLIO TRAILING =================
         ath = get_meta("portfolio_ath", 0)
         if portfolio_value > ath:
             set_meta("portfolio_ath", portfolio_value)
-            ath = portfolio_value # Update local variable too
+            ath = portfolio_value 
 
         if ath > 0 and portfolio_value <= ath * (1 - PORTFOLIO_TRAILING_PCT):
             log_activity(f"🚨 PORTFOLIO TRAILING STOP HIT")
@@ -272,17 +246,26 @@ while True:
                     log_activity(f"⚠️ Emergency sell failed {symbol}: {e}")
             
             sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
-            set_meta("portfolio_ath", get_portfolio_value()) # Reset ATH after exit
+            set_meta("portfolio_ath", get_portfolio_value())
             time.sleep(600)
             continue
 
-        # ================= EXITS =================
+        # ================= EXITS & BREAK-EVEN SHIELD =================
         for pos in get_active_positions():
             symbol = pos['asset']
             cur_price = get_price(symbol)
-            levels = exit_levels(pos['price'])
+            entry_price = pos['price']
+            levels = exit_levels(entry_price)
             
-            if cur_price <= levels['sl']:
+            # Genius Shield: Move SL to Break-even if up 0.5%
+            price_change = (cur_price - entry_price) / entry_price
+            current_sl = levels['sl']
+            
+            if price_change > 0.005:
+                # Shield active: cannot lose on this trade anymore
+                current_sl = max(current_sl, entry_price * 1.001) 
+            
+            if cur_price <= current_sl:
                 try:
                     tx = client.sell_for_usdc(TOKEN_BY_SYMBOL[symbol], pos['amount'])
                     if wait_for_success(client.w3, tx):
@@ -291,38 +274,48 @@ while True:
                 except Exception as e:
                     log_activity(f"⚠️ Exit failed {symbol}: {e}")
                     
-        # ================= ENTRIES =================
+        # ================= ENTRIES (RSI HOOK LOGIC) =================
         if can_trade(state) and not trading_halted:
             active_assets = {ap['asset'] for ap in get_active_positions()}
             for p in get_safe_pairs() or []:
                 symbols = [p["token0"]["symbol"], p["token1"]["symbol"]]
                 if "USDC" not in symbols: continue
                 symbol = symbols[0] if symbols[1] == "USDC" else symbols[1]
-                log_activity(f"Scanning ... {symbol}")
-                time.sleep(3)
                 
                 if symbol in active_assets: continue
                 
                 df = load_ohlcv(symbol, "15m")
                 if df is None or len(df) < 20: continue
                 
+                # RSI Calculation
                 delta = df["close"].diff()
                 gain = delta.clip(lower=0).rolling(14).mean()
                 loss = (-delta.clip(upper=0)).rolling(14).mean()
                 rsi = 100 - (100 / (1 + (gain / loss)))
-                rsi_val = rsi.iloc[-1]
-                log_activity(f"{symbol} | rsi {rsi_val}")
                 
-                if rsi_val < 40 and df["close"].iloc[-1] > df["close"].iloc[-2]:
+                rsi_val = rsi.iloc[-1]
+                rsi_prev = rsi.iloc[-2]
+                
+                # GENIUS ENTRY FILTER: RSI Hook + Price Confirmation
+                is_oversold = rsi_val < 40
+                is_hooking_up = rsi_val > rsi_prev
+                price_recovering = df["close"].iloc[-1] > df["close"].iloc[-2]
+
+                if is_oversold and is_hooking_up and price_recovering:
+                    log_activity(f"🎯 RSI Hook Detected for {symbol} at {rsi_val:.2f}")
                     usdc_amount = calculate_trade_size()
                     if usdc_amount >= 1:
                         try:
                             tx = client.buy_with_usdc(TOKEN_BY_SYMBOL[symbol], usdc_amount)
                             if wait_for_success(client.w3, tx):
-                                record_trade(f"{symbol}/USDC", "BUY", usdc_amount, 0, get_price(symbol), tx, strategy_tag="micro_scalp")
+                                record_trade(f"{symbol}/USDC", "BUY", usdc_amount, 0, get_price(symbol), tx, strategy_tag="rsi_hook_scalp")
                                 sync_balances(client.w3, WALLET_ADDRESS, TOKENS_TO_TRACK)
                         except Exception as e:
                             log_activity(f"⚠️ Buy failed {symbol}: {e}")
+                else:
+                    # Log scanning but not entry
+                    if time.time() % 300 < 60: # Log only once every 5 mins to keep logs clean
+                         log_activity(f"🔍 {symbol} | RSI: {rsi_val:.1f} (No Hook)")
 
         elif trading_halted:
             log_activity("🚫 Skipping scan: Daily loss limit active.")
