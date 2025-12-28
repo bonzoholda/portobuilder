@@ -63,10 +63,10 @@ for symbol, addr in TOKEN_BY_SYMBOL.items():
         TOKENS_TO_TRACK.append((symbol, addr, decimal))
 
 LAST_TRADE_COOLDOWN = 600
-MAX_DAILY_LOSS = -1.5
+MAX_DAILY_LOSS = -5.5
 LOOP_SLEEP = 60
 TRAILING_PERCENT = 0.005
-PORTFOLIO_TRAILING_PCT = 0.03
+PORTFOLIO_TRAILING_PCT = 0.05
 
 SNAPSHOT_FILE = Path("portfolio_snapshots.json")
 SNAPSHOT_INTERVAL = 300
@@ -261,7 +261,7 @@ while True:
             price_change = (cur_price - entry_price) / entry_price
             current_sl = levels['sl']
             
-            if price_change > 0.005:
+            if price_change > 0.009:
                 # Shield active: cannot lose on this trade anymore
                 current_sl = max(current_sl, entry_price * 1.001) 
             
